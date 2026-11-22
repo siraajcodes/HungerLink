@@ -13,6 +13,18 @@ import type {
   Profile,
   UserRole,
 } from '../types/database';
+import type {
+  CommunityFoodInventoryRecord,
+  CommunityNutritionProfile,
+  FoodCompositionItem,
+  NutrientConfig,
+  NutritionalImpactSnapshot,
+  TargetedDonationRequest,
+} from '../types/nutriloop';
+import {
+  DEFAULT_NUTRIENT_CONFIGS,
+  VALIDATED_FOOD_COMPOSITION_TABLE,
+} from '../lib/nutriLoopEngine';
 
 export interface DemoDataset {
   profiles: Record<UserRole, Profile>;
@@ -27,6 +39,12 @@ export interface DemoDataset {
   incidents: Incident[];
   notifications: AppNotification[];
   auditLogs: AuditLog[];
+  foodCatalog: FoodCompositionItem[];
+  nutrientConfigs: NutrientConfig[];
+  communityProfiles: CommunityNutritionProfile[];
+  communityInventory: CommunityFoodInventoryRecord[];
+  targetedRequests: TargetedDonationRequest[];
+  nutritionalSnapshots: NutritionalImpactSnapshot[];
 }
 
 export function createIsolatedDemoDataset(): DemoDataset {
@@ -185,6 +203,7 @@ export function createIsolatedDemoDataset(): DemoDataset {
       created_by: 'demo-user-donor',
       food_item: 'Sambar Sadam, Curd Rice & Vegetable Poriyal',
       food_category: 'COOKED_MEALS',
+      food_composition_id: 'fc-sambar-sadam',
       dietary_type: 'VEGETARIAN',
       portions_available: 100,
       portions_allocated: 0,
@@ -209,8 +228,9 @@ export function createIsolatedDemoDataset(): DemoDataset {
       qr_token: 'hl_demo_opaque_3b7e91d4a20c8f51e6d4b7c29a1f8e05',
       donor_id: '11111111-1111-4111-8111-111111111101',
       created_by: 'demo-user-donor',
-      food_item: 'Vegetable Pulao & Dal Tadka (Awaiting Physical Inspection)',
+      food_item: 'Soya Chunks Protein Curry & Toor Dal (Awaiting Physical Inspection)',
       food_category: 'COOKED_MEALS',
+      food_composition_id: 'fc-soya-chunks',
       dietary_type: 'VEGETARIAN',
       portions_available: 45,
       portions_allocated: 0,
@@ -356,6 +376,166 @@ export function createIsolatedDemoDataset(): DemoDataset {
     },
   ];
 
+  const communityProfiles: CommunityNutritionProfile[] = [
+    {
+      id: 'nl-prof-shelter-a',
+      org_id: '11111111-1111-4111-8111-111111111102', // Shelter A — Adyar Care Home
+      children_1_9_count: 18,
+      adolescents_10_18_count: 12,
+      adults_19_59_count: 20,
+      pregnant_lactating_count: 4,
+      elderly_60_plus_count: 6,
+      dietary_restriction: 'VEGETARIAN',
+      planning_horizon_days: 1,
+      notes: 'Aggregated resident demographic composition only (60 residents; zero personal beneficiary PII).',
+      is_demo: true,
+      updated_at: minsAgo(60),
+    },
+    {
+      id: 'nl-prof-kitchen-b',
+      org_id: '11111111-1111-4111-8111-111111111103', // Community Kitchen B — Velachery
+      children_1_9_count: 10,
+      adolescents_10_18_count: 8,
+      adults_19_59_count: 58,
+      pregnant_lactating_count: 4,
+      elderly_60_plus_count: 10,
+      dietary_restriction: 'VEGETARIAN',
+      planning_horizon_days: 1,
+      notes: 'Evening meal service serving 90 daily-wage workers and families.',
+      is_demo: true,
+      updated_at: minsAgo(45),
+    },
+  ];
+
+  // Shelter A has ample rice (calories) but a clear Protein, Iron, Calcium & Vitamin A gap.
+  const communityInventory: CommunityFoodInventoryRecord[] = [
+    {
+      id: 'nl-inv-1',
+      org_id: '11111111-1111-4111-8111-111111111102',
+      food_composition_id: 'fc-cooked-rice',
+      custom_food_name: 'Steamed Parboiled White Rice (Cooked)',
+      quantity_portions: 240,
+      portion_grams: 250,
+      inventory_stage: 'AVAILABLE',
+      source_batch_id: null,
+      recorded_by: 'demo-user-ngo',
+      recorded_at: minsAgo(120),
+      is_demo: true,
+    },
+    {
+      id: 'nl-inv-2',
+      org_id: '11111111-1111-4111-8111-111111111102',
+      food_composition_id: 'fc-toor-dal',
+      custom_food_name: 'Red Gram (Toor) Dal Tadka (Cooked)',
+      quantity_portions: 35,
+      portion_grams: 200,
+      inventory_stage: 'DISTRIBUTED',
+      source_batch_id: null,
+      recorded_by: 'demo-user-ngo',
+      recorded_at: minsAgo(80),
+      is_demo: true,
+    },
+    {
+      id: 'nl-inv-3',
+      org_id: '11111111-1111-4111-8111-111111111102',
+      food_composition_id: 'fc-cooked-rice',
+      custom_food_name: 'Steamed Parboiled White Rice (Cooked)',
+      quantity_portions: 55,
+      portion_grams: 250,
+      inventory_stage: 'REPORTED_CONSUMED',
+      source_batch_id: null,
+      recorded_by: 'demo-user-ngo',
+      recorded_at: minsAgo(40),
+      is_demo: true,
+    },
+    {
+      id: 'nl-inv-4',
+      org_id: '11111111-1111-4111-8111-111111111103',
+      food_composition_id: 'fc-cooked-rice',
+      custom_food_name: 'Steamed Parboiled White Rice (Cooked)',
+      quantity_portions: 300,
+      portion_grams: 250,
+      inventory_stage: 'AVAILABLE',
+      source_batch_id: null,
+      recorded_by: 'demo-user-kitchen',
+      recorded_at: minsAgo(100),
+      is_demo: true,
+    },
+    {
+      id: 'nl-inv-5',
+      org_id: '11111111-1111-4111-8111-111111111103',
+      food_composition_id: 'fc-chana-masala',
+      custom_food_name: 'Bengal Gram / Chickpea (Chana) Curry',
+      quantity_portions: 90,
+      portion_grams: 200,
+      inventory_stage: 'AVAILABLE',
+      source_batch_id: null,
+      recorded_by: 'demo-user-kitchen',
+      recorded_at: minsAgo(90),
+      is_demo: true,
+    },
+  ];
+
+  // One APPROVED_PUBLISHED targeted request so donors immediately see nutrition-gap demand,
+  // and one DRAFT_GENERATED request awaiting NGO review/approval.
+  const targetedRequests: TargetedDonationRequest[] = [
+    {
+      id: 'nl-treq-published-1',
+      org_id: '11111111-1111-4111-8111-111111111102',
+      target_nutrient_key: 'protein_g',
+      target_nutrient_label: 'Protein',
+      gap_amount: 912,
+      gap_unit: 'g',
+      recommended_food_category: 'PULSES_LEGUMES',
+      recommended_items: [
+        'Soya Chunks Protein Curry (Cooked)',
+        'Paneer & Green Peas Masala',
+        'Bengal Gram / Chickpea (Chana) Curry',
+      ],
+      requested_portions: 40,
+      priority_level: 'HIGH',
+      reason_summary:
+        'Protein-rich food needed: Shelter A has sufficient rice inventory for calories but currently has a reported protein availability gap (~912 g below 1-day ICMR-NIN reference for 60 residents).',
+      dietary_pref: 'VEGETARIAN',
+      required_delivery_date: minsFromNow(240),
+      status: 'APPROVED_PUBLISHED',
+      approved_by: 'demo-user-ngo',
+      approved_at: minsAgo(50),
+      linked_meal_request_id: '33333333-3333-4333-8333-333333333301',
+      matched_batch_id: null,
+      is_demo: true,
+      created_at: minsAgo(55),
+      updated_at: minsAgo(50),
+    },
+    {
+      id: 'nl-treq-draft-2',
+      org_id: '11111111-1111-4111-8111-111111111103',
+      target_nutrient_key: 'vitamin_a_mcg',
+      target_nutrient_label: 'Vitamin A (RAE)',
+      gap_amount: 64200,
+      gap_unit: 'mcg',
+      recommended_food_category: 'LEAFY_VEGETABLES',
+      recommended_items: [
+        'Amaranth & Drumstick Leaves (Keerai) Stir-Fry',
+        'Carrot, Pumpkin & Sweet Potato Stew',
+      ],
+      requested_portions: 60,
+      priority_level: 'CRITICAL',
+      reason_summary:
+        'Vitamin A & leafy greens needed: Community Kitchen B currently has an estimated Vitamin A availability gap across 90 daily-wage beneficiaries.',
+      dietary_pref: 'VEGETARIAN',
+      required_delivery_date: minsFromNow(360),
+      status: 'DRAFT_GENERATED',
+      approved_by: null,
+      approved_at: null,
+      linked_meal_request_id: null,
+      matched_batch_id: null,
+      is_demo: true,
+      created_at: minsAgo(25),
+      updated_at: minsAgo(25),
+    },
+  ];
+
   return {
     profiles,
     organisations,
@@ -369,5 +549,11 @@ export function createIsolatedDemoDataset(): DemoDataset {
     incidents: [],
     notifications,
     auditLogs,
+    foodCatalog: VALIDATED_FOOD_COMPOSITION_TABLE.map((item) => ({ ...item })),
+    nutrientConfigs: DEFAULT_NUTRIENT_CONFIGS.map((cfg) => ({ ...cfg })),
+    communityProfiles,
+    communityInventory,
+    targetedRequests,
+    nutritionalSnapshots: [],
   };
 }

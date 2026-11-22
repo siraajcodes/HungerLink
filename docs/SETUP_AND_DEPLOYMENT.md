@@ -27,6 +27,8 @@ supabase functions deploy matching-engine
 supabase functions deploy mealtrace-verify
 ```
 
+`supabase db push` applies both the core HungerLink migrations (`20261121000001`–`20261121000003`) and the additive **NutriLoop** migration (`20261122000004_nutriloop_schema_and_rls.sql`), which creates the 6 RLS-protected NutriLoop tables, seeds the 6 core ICMR-NIN RDA 2020 nutrients, and installs the `approve_targeted_donation_request` RPC.
+
 ### Provisioning the Initial Administrator
 Because self-registration strictly blocks `ADMINISTRATOR` assignment, promote your authorised administrator account in the Supabase SQL Editor:
 

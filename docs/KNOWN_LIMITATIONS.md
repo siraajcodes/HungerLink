@@ -14,3 +14,7 @@
 
 5. **Offline Queue Storage Scope**:
    - The Field Worker offline queue uses browser `localStorage` strictly for pending non-PII assisted request drafts with UUID idempotency keys. Clearing browser site data before syncing will remove unsynced local drafts.
+
+6. **NutriLoop Estimation vs. Individual Consumption**:
+   - NutriLoop estimates community-level nutritional availability using ICMR-NIN IFCT 2017 / FAO-INFOODS food composition tables and demographic-adjusted ICMR-NIN RDA 2020 requirements. Community food inventory availability does **not** prove individual dietary intake or clinical nutrition outcomes. Unmapped food items are transparently excluded rather than fabricated.
+

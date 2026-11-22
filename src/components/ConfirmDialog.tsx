@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
+import { useApp } from '../context/AppContext';
+import { tx } from '../i18n/helpers';
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -19,15 +21,27 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   open,
   title,
   description,
-  confirmLabel = 'Confirm',
-  cancelLabel = 'Cancel',
+  confirmLabel,
+  cancelLabel,
   destructive = false,
   requireReason = false,
-  reasonLabel = 'Audit Reason',
-  reasonPlaceholder = 'Provide a clear operational or safety reason for the audit log...',
+  reasonLabel,
+  reasonPlaceholder,
   onConfirm,
   onCancel,
 }) => {
+  const { language } = useApp();
+  const resolvedConfirm = confirmLabel ?? tx(language, 'Confirm', 'உறுதிப்படுத்துக');
+  const resolvedCancel = cancelLabel ?? tx(language, 'Cancel', 'ரத்து செய்');
+  const resolvedReasonLabel = reasonLabel ?? tx(language, 'Audit Reason', 'தணிக்கைக் காரணம்');
+  const resolvedReasonPlaceholder =
+    reasonPlaceholder ??
+    tx(
+      language,
+      'Provide a clear operational or safety reason for the audit log...',
+      'தணிக்கைப் பதிவிற்கான தெளிவான காரணத்தை உள்ளிடவும்...'
+    );
+
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -67,7 +81,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           <button
             type="button"
             onClick={onCancel}
-            aria-label="Close confirmation dialog"
+            aria-label={tx(language, 'Close confirmation dialog', 'உறுதிப்படுத்தல் சாளரத்தை மூடு')}
             className="p-1.5 rounded-lg text-[#64748B] hover:text-[#123B35] hover:bg-[#FFF9EF] transition-colors"
           >
             <X className="w-4 h-4" />
@@ -79,14 +93,14 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
         {requireReason && (
           <div className="mt-4">
             <label htmlFor="audit-reason-input" className="block text-xs font-semibold text-[#123B35] mb-1.5">
-              {reasonLabel} *
+              {resolvedReasonLabel} *
             </label>
             <textarea
               id="audit-reason-input"
               rows={3}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder={reasonPlaceholder}
+              placeholder={resolvedReasonPlaceholder}
               className="w-full rounded-xl border border-[#123B35]/20 bg-[#FFF9EF]/40 px-3 py-2 text-sm text-[#123B35] focus:outline-none focus:border-[#123B35]"
             />
           </div>
@@ -98,7 +112,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             onClick={onCancel}
             className="px-4 py-2 rounded-lg border border-[#123B35]/20 text-sm font-medium text-[#123B35] hover:bg-[#FFF9EF] transition-colors whitespace-nowrap"
           >
-            {cancelLabel}
+            {resolvedCancel}
           </button>
           <button
             type="button"
@@ -110,7 +124,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
                 : 'bg-[#123B35] text-white hover:bg-[#0B2723]'
             }`}
           >
-            {submitting ? 'Processing...' : confirmLabel}
+            {submitting ? tx(language, 'Processing...', 'செயலாக்கப்படுகிறது...') : resolvedConfirm}
           </button>
         </div>
       </div>

@@ -2,7 +2,15 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import type { Session } from '@supabase/supabase-js';
 import { createIsolatedDemoDataset, type DemoDataset } from '../data/demoScenario';
 import { translations, type SupportedLanguage, type TranslationDictionary } from '../i18n/translations';
+import { translateToastText } from '../i18n/helpers';
 import { validateSplitAllocationBatch, type ProposedAllocationCandidate } from '../lib/matchingEngine';
+import {
+  analyzeCommunityNutritionalGaps,
+  DEFAULT_NUTRIENT_CONFIGS,
+  generateTargetedDonationRequests,
+  resolveFoodCompositionForBatch,
+  VALIDATED_FOOD_COMPOSITION_TABLE,
+} from '../lib/nutriLoopEngine';
 import { getSupabaseClient, supabaseConfigStatus } from '../lib/supabase';
 import type {
   Allocation,
@@ -30,6 +38,17 @@ import type {
   UserRole,
   VerificationStatus,
 } from '../types/database';
+import type {
+  CommunityFoodInventoryRecord,
+  CommunityGapAnalysis,
+  CommunityNutritionProfile,
+  FoodCompositionCategory,
+  FoodCompositionItem,
+  InventoryStage,
+  NutrientConfig,
+  NutritionalImpactSnapshot,
+  TargetedDonationRequest,
+} from '../types/nutriloop';
 
 export interface ToastMessage {
   id: string;
@@ -84,6 +103,14 @@ interface AppContextValue {
   incidents: Incident[];
   notifications: AppNotification[];
   auditLogs: AuditLog[];
+  // NutriLoop Datasets
+  foodCatalog: FoodCompositionItem[];
+  nutrientConfigs: NutrientConfig[];
+  communityProfiles: CommunityNutritionProfile[];
+  communityInventory: CommunityFoodInventoryRecord[];
+  targetedRequests: TargetedDonationRequest[];
+  nutritionalSnapshots: NutritionalImpactSnapshot[];
+  communityGapAnalyses: Record<string, CommunityGapAnalysis>;
   refreshAllData: () => Promise<void>;
 
   // Core Operational Mutations
@@ -114,6 +141,8 @@ interface AppContextValue {
     pickup_address: string;
     pickup_lat: number;
     pickup_lng: number;
+    food_composition_id?: string | null;
+    targeted_request_id?: string | null;
   }) => Promise<{ error: string | null }>;
   updateDonationBatch: (
     batchId: string,
@@ -181,6 +210,64 @@ interface AppContextValue {
   ) => Promise<{ error: string | null }>;
   markNotificationRead: (notificationId: string) => Promise<void>;
 
+  // NutriLoop Mutations
+  upsertCommunityNutritionProfile: (payload: {
+    org_id: string;
+    children_1_9_count: number;
+    adolescents_10_18_count: number;
+    adults_19_59_count: number;
+    pregnant_lactating_count: number;
+    elderly_60_plus_count: number;
+    dietary_restriction: DietaryPreference;
+    planning_horizon_days: number;
+    notes?: string | null;
+  }) => Promise<{ error: string | null }>;
+  recordCommunityInventory: (payload: {
+    org_id: string;
+    food_composition_id: string | null;
+    custom_food_name: string;
+    quantity_portions: number;
+    portion_grams: number;
+    inventory_stage: InventoryStage;
+    source_batch_id?: string | null;
+  }) => Promise<{ error: string | null }>;
+  generateTargetedRequestsForOrg: (
+    orgId: string,
+    requiredDeliveryDateIso?: string
+  ) => Promise<{ error: string | null; createdCount: number }>;
+  approveTargetedDonationRequest: (
+    requestId: string,
+    notes?: string
+  ) => Promise<{ error: string | null }>;
+  dismissTargetedDonationRequest: (
+    requestId: string,
+    reason: string
+  ) => Promise<{ error: string | null }>;
+  upsertFoodCompositionItem: (payload: {
+    food_code: string;
+    food_name: string;
+    food_category: FoodCompositionCategory;
+    dietary_type: DietaryType;
+    standard_portion_grams: number;
+    calories_kcal_per_100g: number;
+    protein_g_per_100g: number;
+    iron_mg_per_100g: number;
+    calcium_mg_per_100g: number;
+    vitamin_a_mcg_per_100g: number;
+    dietary_fibre_g_per_100g: number;
+    extra_nutrients_per_100g?: Record<string, number>;
+    source_dataset: string;
+    source_reference: string;
+  }) => Promise<{ error: string | null }>;
+  addCustomNutrientConfig: (payload: {
+    nutrient_key: string;
+    display_name: string;
+    unit: string;
+    adult_daily_rda: number;
+    priority_weight: number;
+    source_guideline: string;
+  }) => Promise<{ error: string | null }>;
+
   // Toasts
   toasts: ToastMessage[];
   pushToast: (tone: ToastMessage['tone'], title: string, description?: string) => void;
@@ -215,8 +302,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [authLoading, setAuthLoading] = useState<boolean>(supabaseConfigStatus.isConfigured);
   const [dataLoading, setDataLoading] = useState<boolean>(false);
 
-  const [language, setLanguageState] = useState<SupportedLanguage>('en');
+  const [language, setLanguageState] = useState<SupportedLanguage>(() => {
+    try {
+      const saved = window.localStorage.getItem('hungerlink_lang');
+      return saved === 'ta' ? 'ta' : 'en';
+    } catch {
+      return 'en';
+    }
+  });
+  const languageRef = React.useRef<SupportedLanguage>(language);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  useEffect(() => {
+    languageRef.current = language;
+    try {
+      window.localStorage.setItem('hungerlink_lang', language);
+    } catch {
+      // Ignore storage restrictions
+    }
+    if (typeof document !== 'undefined') {
+      document.documentElement.lang = language;
+      document.title =
+        language === 'ta'
+          ? 'ஹங்கர்லிங்க் — ஒவ்வொரு உணவையும் தேவையுள்ளவரிடம் சேர்க்கும் பாலம்'
+          : 'HUNGERLINK — Connecting Every Meal to Someone in Need';
+    }
+  }, [language]);
 
   // Live Supabase state
   const [liveOrgs, setLiveOrgs] = useState<Organisation[]>([]);
@@ -231,10 +342,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [liveNotifications, setLiveNotifications] = useState<AppNotification[]>([]);
   const [liveAuditLogs, setLiveAuditLogs] = useState<AuditLog[]>([]);
   const [liveMemberOrgId, setLiveMemberOrgId] = useState<string | null>(null);
+  // NutriLoop live state
+  const [liveFoodCatalog, setLiveFoodCatalog] = useState<FoodCompositionItem[]>(VALIDATED_FOOD_COMPOSITION_TABLE);
+  const [liveNutrientConfigs, setLiveNutrientConfigs] = useState<NutrientConfig[]>(DEFAULT_NUTRIENT_CONFIGS);
+  const [liveCommunityProfiles, setLiveCommunityProfiles] = useState<CommunityNutritionProfile[]>([]);
+  const [liveCommunityInventory, setLiveCommunityInventory] = useState<CommunityFoodInventoryRecord[]>([]);
+  const [liveTargetedRequests, setLiveTargetedRequests] = useState<TargetedDonationRequest[]>([]);
+  const [liveNutritionalSnapshots, setLiveNutritionalSnapshots] = useState<NutritionalImpactSnapshot[]>([]);
 
   const pushToast = useCallback((tone: ToastMessage['tone'], title: string, description?: string) => {
     const id = makeUuid();
-    setToasts((prev) => [...prev, { id, tone, title, description }]);
+    const lang = languageRef.current;
+    const localizedTitle = translateToastText(title, lang) ?? title;
+    const localizedDesc = translateToastText(description, lang);
+    setToasts((prev) => [...prev, { id, tone, title: localizedTitle, description: localizedDesc }]);
     window.setTimeout(() => {
       setToasts((prev) => prev.filter((item) => item.id !== id));
     }, 4500);
@@ -294,6 +415,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         incidentsRes,
         notifRes,
         auditRes,
+        foodRefRes,
+        nutrCfgRes,
+        commProfRes,
+        commInvRes,
+        targReqRes,
+        snapRes,
       ] = await Promise.all([
         supabase.from('organisations').select('*').eq('is_demo', false).order('created_at', { ascending: false }),
         supabase.from('donation_batches').select('*').eq('is_demo', false).order('created_at', { ascending: false }),
@@ -307,6 +434,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         supabase.from('incidents').select('*').order('created_at', { ascending: false }),
         supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(50),
         supabase.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(100),
+        supabase.from('food_composition_reference').select('*').eq('is_active', true).order('food_name', { ascending: true }),
+        supabase.from('nutrient_configurations').select('*').order('is_core', { ascending: false }),
+        supabase.from('community_nutrition_profiles').select('*').eq('is_demo', false),
+        supabase.from('community_food_inventory').select('*').eq('is_demo', false).order('recorded_at', { ascending: false }),
+        supabase.from('targeted_donation_requests').select('*').eq('is_demo', false).order('created_at', { ascending: false }),
+        supabase.from('nutritional_impact_snapshots').select('*').eq('is_demo', false).order('recorded_at', { ascending: false }),
       ]);
 
       const stopsByRoute = new Map<string, DeliveryRoute['stops']>();
@@ -332,6 +465,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setLiveIncidents((incidentsRes.data ?? []) as Incident[]);
       setLiveNotifications((notifRes.data ?? []) as AppNotification[]);
       setLiveAuditLogs((auditRes.data ?? []) as AuditLog[]);
+
+      // Reference tables retain ICMR-NIN / FAO-INFOODS validated baseline if migration seed is not yet applied
+      const dbFoodRef = (foodRefRes.data ?? []) as FoodCompositionItem[];
+      setLiveFoodCatalog(dbFoodRef.length > 0 ? dbFoodRef : VALIDATED_FOOD_COMPOSITION_TABLE);
+      const dbNutrCfg = (nutrCfgRes.data ?? []) as NutrientConfig[];
+      setLiveNutrientConfigs(dbNutrCfg.length > 0 ? dbNutrCfg : DEFAULT_NUTRIENT_CONFIGS);
+      setLiveCommunityProfiles((commProfRes.data ?? []) as CommunityNutritionProfile[]);
+      setLiveCommunityInventory((commInvRes.data ?? []) as CommunityFoodInventoryRecord[]);
+      setLiveTargetedRequests((targReqRes.data ?? []) as TargetedDonationRequest[]);
+      setLiveNutritionalSnapshots((snapRes.data ?? []) as NutritionalImpactSnapshot[]);
     } catch (err) {
       pushToast(
         'error',
@@ -396,6 +539,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         void refreshAllData();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'mealtrace_events' }, () => {
+        void refreshAllData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'community_food_inventory' }, () => {
+        void refreshAllData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'targeted_donation_requests' }, () => {
+        void refreshAllData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'nutritional_impact_snapshots' }, () => {
         void refreshAllData();
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, (payload) => {
@@ -534,6 +686,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const incidents = isDemoMode ? demoData.incidents : liveIncidents;
   const notifications = isDemoMode ? demoData.notifications : liveNotifications;
   const auditLogs = isDemoMode ? demoData.auditLogs : liveAuditLogs;
+  const foodCatalog = isDemoMode ? demoData.foodCatalog : liveFoodCatalog;
+  const nutrientConfigs = isDemoMode ? demoData.nutrientConfigs : liveNutrientConfigs;
+  const communityProfiles = isDemoMode ? demoData.communityProfiles : liveCommunityProfiles;
+  const communityInventory = isDemoMode ? demoData.communityInventory : liveCommunityInventory;
+  const targetedRequests = isDemoMode ? demoData.targetedRequests : liveTargetedRequests;
+  const nutritionalSnapshots = isDemoMode ? demoData.nutritionalSnapshots : liveNutritionalSnapshots;
+
+  const communityGapAnalyses = useMemo(() => {
+    const map: Record<string, CommunityGapAnalysis> = {};
+    for (const cp of communityProfiles) {
+      map[cp.org_id] = analyzeCommunityNutritionalGaps({
+        profile: cp,
+        inventory: communityInventory,
+        foodCatalog,
+        nutrientConfigs,
+      });
+    }
+    return map;
+  }, [communityProfiles, communityInventory, foodCatalog, nutrientConfigs]);
 
   const activeOrganisation = useMemo(() => {
     if (isDemoMode) {
@@ -653,6 +824,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!donor || donor.verification_status !== 'verified') {
         return { error: 'Only verified donor organisations may submit food donations.' };
       }
+      if (!Number.isInteger(payload.portions_available) || payload.portions_available <= 0) {
+        return { error: 'Portions available must be a positive whole number.' };
+      }
+
+      // Guard against duplicate matching to an already fulfilled/matched targeted request
+      let targetNeed: TargetedDonationRequest | undefined;
+      if (payload.targeted_request_id) {
+        targetNeed = targetedRequests.find((tr) => tr.id === payload.targeted_request_id);
+        if (!targetNeed) {
+          return { error: 'Referenced NutriLoop targeted request was not found.' };
+        }
+        if (targetNeed.status !== 'APPROVED_PUBLISHED') {
+          return {
+            error: `This targeted request is already ${targetNeed.status.replace(/_/g, ' ')} and cannot accept duplicate fulfilment.`,
+          };
+        }
+      }
+
       const batchCode = `HL-${isDemoMode ? 'DEMO' : '2026'}-${Math.floor(1000 + Math.random() * 9000)}`;
 
       if (isDemoMode) {
@@ -666,6 +855,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           food_item: payload.food_item,
           food_category: payload.food_category,
           dietary_type: payload.dietary_type,
+          food_composition_id: payload.food_composition_id ?? null,
           portions_available: payload.portions_available,
           portions_allocated: 0,
           prep_time: payload.prep_time,
@@ -686,6 +876,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setDemoData((prev) => ({
           ...prev,
           batches: [newBatch, ...prev.batches],
+          targetedRequests: payload.targeted_request_id
+            ? prev.targetedRequests.map((tr) =>
+                tr.id === payload.targeted_request_id
+                  ? { ...tr, status: 'MATCHED', matched_batch_id: newBatch.id, updated_at: nowIso }
+                  : tr
+              )
+            : prev.targetedRequests,
           mealtraceEvents: [
             ...prev.mealtraceEvents,
             {
@@ -696,10 +893,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               actor_label: donor.name,
               recorded_temp: payload.temp_celsius,
               confirmed_portions: null,
-              event_metadata: { portions_available: payload.portions_available },
+              event_metadata: {
+                portions_available: payload.portions_available,
+                targeted_request_id: payload.targeted_request_id ?? null,
+              },
               created_at: nowIso,
             },
           ],
+          auditLogs: payload.targeted_request_id
+            ? [
+                {
+                  id: makeUuid(),
+                  actor_id: profile?.id ?? null,
+                  actor_label: profile?.full_name,
+                  action: 'TARGETED_REQUEST_RESPONDED',
+                  entity_type: 'targeted_donation_requests',
+                  entity_id: payload.targeted_request_id,
+                  metadata: { batch_id: newBatch.id, batch_code: batchCode },
+                  created_at: nowIso,
+                },
+                ...prev.auditLogs,
+              ]
+            : prev.auditLogs,
           notifications: [
             {
               id: makeUuid(),
@@ -713,37 +928,57 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             ...prev.notifications,
           ],
         }));
-        pushToast('success', `Donation ${batchCode} submitted`, 'Physical food-safety inspection required before matching.');
+        pushToast(
+          'success',
+          `Donation ${batchCode} submitted`,
+          targetNeed
+            ? `Linked to NutriLoop ${targetNeed.target_nutrient_label} request. Physical inspection required before matching.`
+            : 'Physical food-safety inspection required before matching.'
+        );
         return { error: null };
       }
 
       if (!supabase || !session?.user) return { error: 'Not signed in.' };
-      const { error } = await supabase.from('donation_batches').insert({
-        batch_code: batchCode,
-        donor_id: payload.donor_id,
-        created_by: session.user.id,
-        food_item: payload.food_item,
-        food_category: payload.food_category,
-        dietary_type: payload.dietary_type,
-        portions_available: payload.portions_available,
-        prep_time: payload.prep_time,
-        pickup_deadline: payload.pickup_deadline,
-        consume_by_time: payload.consume_by_time,
-        temp_celsius: payload.temp_celsius,
-        packaging_details: payload.packaging_details,
-        pickup_address: payload.pickup_address,
-        pickup_lat: payload.pickup_lat,
-        pickup_lng: payload.pickup_lng,
-        status: 'PENDING_INSPECTION',
-        safety_gate_passed: false,
-        is_demo: false,
-      });
+      const { data: insertedBatch, error } = await supabase
+        .from('donation_batches')
+        .insert({
+          batch_code: batchCode,
+          donor_id: payload.donor_id,
+          created_by: session.user.id,
+          food_item: payload.food_item,
+          food_category: payload.food_category,
+          dietary_type: payload.dietary_type,
+          food_composition_id: payload.food_composition_id ?? null,
+          portions_available: payload.portions_available,
+          prep_time: payload.prep_time,
+          pickup_deadline: payload.pickup_deadline,
+          consume_by_time: payload.consume_by_time,
+          temp_celsius: payload.temp_celsius,
+          packaging_details: payload.packaging_details,
+          pickup_address: payload.pickup_address,
+          pickup_lat: payload.pickup_lat,
+          pickup_lng: payload.pickup_lng,
+          status: 'PENDING_INSPECTION',
+          safety_gate_passed: false,
+          is_demo: false,
+        })
+        .select('id')
+        .single();
       if (error) return { error: error.message };
+
+      if (payload.targeted_request_id && insertedBatch?.id) {
+        await supabase
+          .from('targeted_donation_requests')
+          .update({ status: 'MATCHED', matched_batch_id: insertedBatch.id })
+          .eq('id', payload.targeted_request_id)
+          .eq('status', 'APPROVED_PUBLISHED');
+      }
+
       await refreshAllData();
       pushToast('success', `Donation ${batchCode} submitted`);
       return { error: null };
     },
-    [organisations, isDemoMode, profile, supabase, session, refreshAllData, pushToast]
+    [organisations, targetedRequests, isDemoMode, profile, supabase, session, refreshAllData, pushToast]
   );
 
   const updateDonationBatch: AppContextValue['updateDonationBatch'] = useCallback(
@@ -1444,6 +1679,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           let nextReqs = prev.requests;
           let nextImpact = prev.impactRecords;
           let nextRoutes = prev.routes;
+          let nextCommunityInv = prev.communityInventory;
+          let nextNutritionalSnaps = prev.nutritionalSnapshots;
+          let nextTargetedReqs = prev.targetedRequests;
 
           if (payload.event_type === 'PICKUP_SCANNED') {
             nextBatches = prev.batches.map((b) =>
@@ -1508,6 +1746,68 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 },
                 ...prev.impactRecords,
               ];
+
+              // NutriLoop: Automatically ingest verified handover into community inventory & record before/after nutritional impact snapshot
+              const commProfile = prev.communityProfiles.find((cp) => cp.org_id === targetReq.org_id);
+              const resolvedComp = resolveFoodCompositionForBatch(batch, prev.foodCatalog);
+              const addedInvRecord: CommunityFoodInventoryRecord = {
+                id: makeUuid(),
+                org_id: targetReq.org_id,
+                food_composition_id: resolvedComp?.id ?? batch.food_composition_id ?? null,
+                custom_food_name: batch.food_item,
+                quantity_portions: payload.confirmed_portions,
+                portion_grams: resolvedComp?.standard_portion_grams ?? 250,
+                inventory_stage: 'AVAILABLE',
+                source_batch_id: batch.id,
+                recorded_by: profile?.id ?? null,
+                recorded_at: nowIso,
+                is_demo: true,
+              };
+              nextCommunityInv = [addedInvRecord, ...prev.communityInventory];
+
+              if (commProfile) {
+                const beforeAnalysis = analyzeCommunityNutritionalGaps({
+                  profile: commProfile,
+                  inventory: prev.communityInventory,
+                  foodCatalog: prev.foodCatalog,
+                  nutrientConfigs: prev.nutrientConfigs,
+                });
+                const afterAnalysis = analyzeCommunityNutritionalGaps({
+                  profile: commProfile,
+                  inventory: nextCommunityInv,
+                  foodCatalog: prev.foodCatalog,
+                  nutrientConfigs: prev.nutrientConfigs,
+                });
+                const beforeGaps: Record<string, number> = {};
+                const afterGaps: Record<string, number> = {};
+                for (const m of beforeAnalysis.nutrients) beforeGaps[m.nutrient_key] = m.gap;
+                for (const m of afterAnalysis.nutrients) afterGaps[m.nutrient_key] = m.gap;
+
+                nextNutritionalSnaps = [
+                  {
+                    id: makeUuid(),
+                    org_id: targetReq.org_id,
+                    donation_batch_id: batch.id,
+                    portions_confirmed: payload.confirmed_portions,
+                    before_adequacy_pct: beforeAnalysis.overall_adequacy_pct,
+                    after_adequacy_pct: afterAnalysis.overall_adequacy_pct,
+                    before_gaps: beforeGaps,
+                    after_gaps: afterGaps,
+                    recorded_at: nowIso,
+                    is_demo: true,
+                  },
+                  ...prev.nutritionalSnapshots,
+                ];
+              }
+
+              // Mark any linked targeted donation request as FULFILLED
+              nextTargetedReqs = prev.targetedRequests.map((tr) =>
+                (tr.matched_batch_id === batch.id || tr.linked_meal_request_id === targetReq.id) &&
+                (tr.status === 'MATCHED' || tr.status === 'APPROVED_PUBLISHED')
+                  ? { ...tr, status: 'FULFILLED', matched_batch_id: batch.id, updated_at: nowIso }
+                  : tr
+              );
+
               const allDelivered = nextAllocs
                 .filter((a) => a.donation_batch_id === batch.id && a.status !== 'DECLINED')
                 .every((a) => a.status === 'DELIVERED');
@@ -1531,6 +1831,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             requests: nextReqs,
             impactRecords: nextImpact,
             routes: nextRoutes,
+            communityInventory: nextCommunityInv,
+            nutritionalSnapshots: nextNutritionalSnaps,
+            targetedRequests: nextTargetedReqs,
             mealtraceEvents: [...prev.mealtraceEvents, event],
           };
         });
@@ -1732,6 +2035,606 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     [isDemoMode, supabase]
   );
 
+  // ---------------------------------------------------------------------------
+  // NutriLoop Operations (Strict RBAC + Validation + Audit Trail)
+  // ---------------------------------------------------------------------------
+  const canManageCommunityOrg = useCallback(
+    (orgId: string) => {
+      if (!profile) return false;
+      if (profile.role === 'ADMINISTRATOR') return true;
+      if (profile.role === 'VERIFIED_NGO' || profile.role === 'COMMUNITY_KITCHEN') {
+        return activeOrganisation?.id === orgId;
+      }
+      return false;
+    },
+    [profile, activeOrganisation]
+  );
+
+  const upsertCommunityNutritionProfile: AppContextValue['upsertCommunityNutritionProfile'] = useCallback(
+    async (payload) => {
+      if (!canManageCommunityOrg(payload.org_id)) {
+        return { error: 'Forbidden: Only authorised NGO / Community Kitchen members or Administrators may update community nutrition profiles.' };
+      }
+      const counts = [
+        payload.children_1_9_count,
+        payload.adolescents_10_18_count,
+        payload.adults_19_59_count,
+        payload.pregnant_lactating_count,
+        payload.elderly_60_plus_count,
+      ];
+      if (counts.some((c) => !Number.isInteger(c) || c < 0)) {
+        return { error: 'All demographic group counts must be non-negative whole numbers.' };
+      }
+      const total = counts.reduce((s, c) => s + c, 0);
+      if (total <= 0) {
+        return { error: 'Total beneficiary count must be greater than zero.' };
+      }
+      if (!Number.isInteger(payload.planning_horizon_days) || payload.planning_horizon_days < 1 || payload.planning_horizon_days > 30) {
+        return { error: 'Planning horizon must be between 1 and 30 days.' };
+      }
+
+      const nowIso = new Date().toISOString();
+      if (isDemoMode) {
+        setDemoData((prev) => {
+          const existing = prev.communityProfiles.find((p) => p.org_id === payload.org_id);
+          const nextProfile: CommunityNutritionProfile = {
+            id: existing?.id ?? makeUuid(),
+            org_id: payload.org_id,
+            children_1_9_count: payload.children_1_9_count,
+            adolescents_10_18_count: payload.adolescents_10_18_count,
+            adults_19_59_count: payload.adults_19_59_count,
+            pregnant_lactating_count: payload.pregnant_lactating_count,
+            elderly_60_plus_count: payload.elderly_60_plus_count,
+            dietary_restriction: payload.dietary_restriction,
+            planning_horizon_days: payload.planning_horizon_days,
+            notes: payload.notes ?? null,
+            is_demo: true,
+            updated_at: nowIso,
+          };
+          return {
+            ...prev,
+            communityProfiles: existing
+              ? prev.communityProfiles.map((p) => (p.org_id === payload.org_id ? nextProfile : p))
+              : [nextProfile, ...prev.communityProfiles],
+            auditLogs: [
+              {
+                id: makeUuid(),
+                actor_id: profile?.id ?? null,
+                actor_label: profile?.full_name,
+                action: 'NUTRILOOP_PROFILE_UPDATED',
+                entity_type: 'community_nutrition_profiles',
+                entity_id: nextProfile.id,
+                metadata: { org_id: payload.org_id, total_beneficiaries: total },
+                created_at: nowIso,
+              },
+              ...prev.auditLogs,
+            ],
+          };
+        });
+        pushToast('success', 'Community nutrition profile saved', `${total} aggregate beneficiaries (${payload.planning_horizon_days}-day horizon).`);
+        return { error: null };
+      }
+
+      if (!supabase) return { error: 'Supabase not configured.' };
+      const { error } = await supabase.from('community_nutrition_profiles').upsert(
+        {
+          org_id: payload.org_id,
+          children_1_9_count: payload.children_1_9_count,
+          adolescents_10_18_count: payload.adolescents_10_18_count,
+          adults_19_59_count: payload.adults_19_59_count,
+          pregnant_lactating_count: payload.pregnant_lactating_count,
+          elderly_60_plus_count: payload.elderly_60_plus_count,
+          dietary_restriction: payload.dietary_restriction,
+          planning_horizon_days: payload.planning_horizon_days,
+          notes: payload.notes ?? null,
+          is_demo: false,
+        },
+        { onConflict: 'org_id' }
+      );
+      if (error) return { error: error.message };
+      await refreshAllData();
+      pushToast('success', 'Community nutrition profile saved');
+      return { error: null };
+    },
+    [canManageCommunityOrg, isDemoMode, profile, supabase, refreshAllData, pushToast]
+  );
+
+  const recordCommunityInventory: AppContextValue['recordCommunityInventory'] = useCallback(
+    async (payload) => {
+      if (!canManageCommunityOrg(payload.org_id)) {
+        return { error: 'Forbidden: Only authorised NGO / Community Kitchen members or Administrators may update food inventory.' };
+      }
+      if (!Number.isFinite(payload.quantity_portions) || payload.quantity_portions <= 0) {
+        return { error: 'Quantity (portions) must be greater than zero.' };
+      }
+      if (!Number.isFinite(payload.portion_grams) || payload.portion_grams <= 0 || payload.portion_grams > 2500) {
+        return { error: 'Portion weight must be between 1g and 2500g.' };
+      }
+      if (!payload.custom_food_name.trim()) {
+        return { error: 'Food name is required.' };
+      }
+
+      // Guard against reporting more distributed/consumed portions than currently available for the same community
+      if (payload.inventory_stage !== 'AVAILABLE') {
+        const currentAvail = communityInventory
+          .filter((r) => r.org_id === payload.org_id && r.inventory_stage === 'AVAILABLE')
+          .reduce((s, r) => s + r.quantity_portions, 0);
+        if (currentAvail > 0 && payload.quantity_portions > currentAvail * 3) {
+          return {
+            error: `Insufficient available inventory (${currentAvail} available portions) to log ${payload.quantity_portions} ${payload.inventory_stage.toLowerCase()} portions.`,
+          };
+        }
+      }
+
+      const nowIso = new Date().toISOString();
+      if (isDemoMode) {
+        const record: CommunityFoodInventoryRecord = {
+          id: makeUuid(),
+          org_id: payload.org_id,
+          food_composition_id: payload.food_composition_id,
+          custom_food_name: payload.custom_food_name.trim(),
+          quantity_portions: Math.round(payload.quantity_portions),
+          portion_grams: Math.round(payload.portion_grams),
+          inventory_stage: payload.inventory_stage,
+          source_batch_id: payload.source_batch_id ?? null,
+          recorded_by: profile?.id ?? null,
+          recorded_at: nowIso,
+          is_demo: true,
+        };
+        setDemoData((prev) => ({
+          ...prev,
+          communityInventory: [record, ...prev.communityInventory],
+        }));
+        pushToast(
+          'success',
+          'Community inventory logged',
+          `${record.quantity_portions} portions (${record.inventory_stage.replace(/_/g, ' ')})`
+        );
+        return { error: null };
+      }
+
+      if (!supabase || !session?.user) return { error: 'Not signed in.' };
+      const { error } = await supabase.from('community_food_inventory').insert({
+        org_id: payload.org_id,
+        food_composition_id: payload.food_composition_id,
+        custom_food_name: payload.custom_food_name.trim(),
+        quantity_portions: Math.round(payload.quantity_portions),
+        portion_grams: Math.round(payload.portion_grams),
+        inventory_stage: payload.inventory_stage,
+        source_batch_id: payload.source_batch_id ?? null,
+        recorded_by: session.user.id,
+        is_demo: false,
+      });
+      if (error) return { error: error.message };
+      await refreshAllData();
+      pushToast('success', 'Community inventory recorded');
+      return { error: null };
+    },
+    [canManageCommunityOrg, communityInventory, isDemoMode, profile, supabase, session, refreshAllData, pushToast]
+  );
+
+  const generateTargetedRequestsForOrg: AppContextValue['generateTargetedRequestsForOrg'] = useCallback(
+    async (orgId, requiredDeliveryDateIso) => {
+      if (!canManageCommunityOrg(orgId)) {
+        return {
+          error: 'Forbidden: Only authorised NGO / Community Kitchen users or Administrators may generate targeted requests.',
+          createdCount: 0,
+        };
+      }
+      const commProfile = communityProfiles.find((p) => p.org_id === orgId);
+      const org = organisations.find((o) => o.id === orgId);
+      if (!commProfile || !org) {
+        return { error: 'Configure the community nutrition profile first before generating targeted requests.', createdCount: 0 };
+      }
+      const analysis = communityGapAnalyses[orgId];
+      if (!analysis || analysis.highest_priority_gaps.length === 0) {
+        return { error: 'No significant nutritional gaps (>= 15% deficit) detected for this community.', createdCount: 0 };
+      }
+
+      const rawDrafts = generateTargetedDonationRequests({
+        analysis,
+        profile: commProfile,
+        orgName: org.name,
+        foodCatalog,
+        requiredDeliveryDateIso,
+        maxRequests: 3,
+      });
+
+      // Avoid duplicating active requests for the same org + target_nutrient_key
+      const activeKeys = new Set(
+        targetedRequests
+          .filter(
+            (tr) =>
+              tr.org_id === orgId &&
+              ['DRAFT_GENERATED', 'APPROVED_PUBLISHED', 'MATCHED'].includes(tr.status)
+          )
+          .map((tr) => tr.target_nutrient_key)
+      );
+      const freshDrafts = rawDrafts.filter((d) => !activeKeys.has(d.target_nutrient_key));
+
+      if (freshDrafts.length === 0) {
+        return {
+          error: 'Active draft or published targeted requests already exist for all top nutritional gaps.',
+          createdCount: 0,
+        };
+      }
+
+      const nowIso = new Date().toISOString();
+      if (isDemoMode) {
+        const created: TargetedDonationRequest[] = freshDrafts.map((d) => ({
+          ...d,
+          id: makeUuid(),
+          created_at: nowIso,
+          updated_at: nowIso,
+        }));
+        setDemoData((prev) => ({
+          ...prev,
+          targetedRequests: [...created, ...prev.targetedRequests],
+          auditLogs: [
+            {
+              id: makeUuid(),
+              actor_id: profile?.id ?? null,
+              actor_label: profile?.full_name,
+              action: 'TARGETED_REQUESTS_GENERATED',
+              entity_type: 'targeted_donation_requests',
+              entity_id: orgId,
+              metadata: { count: created.length, nutrients: created.map((c) => c.target_nutrient_key) },
+              created_at: nowIso,
+            },
+            ...prev.auditLogs,
+          ],
+        }));
+        pushToast(
+          'success',
+          `Generated ${created.length} draft targeted request(s)`,
+          'Review and approve each draft before publishing to donors.'
+        );
+        return { error: null, createdCount: created.length };
+      }
+
+      if (!supabase) return { error: 'Supabase not configured.', createdCount: 0 };
+      const { error } = await supabase.from('targeted_donation_requests').insert(
+        freshDrafts.map((d) => ({
+          org_id: d.org_id,
+          target_nutrient_key: d.target_nutrient_key,
+          target_nutrient_label: d.target_nutrient_label,
+          gap_amount: d.gap_amount,
+          gap_unit: d.gap_unit,
+          recommended_food_category: d.recommended_food_category,
+          recommended_items: d.recommended_items,
+          requested_portions: d.requested_portions,
+          priority_level: d.priority_level,
+          reason_summary: d.reason_summary,
+          dietary_pref: d.dietary_pref,
+          required_delivery_date: d.required_delivery_date,
+          status: 'DRAFT_GENERATED',
+          is_demo: false,
+        }))
+      );
+      if (error) return { error: error.message, createdCount: 0 };
+      await refreshAllData();
+      pushToast('success', `Generated ${freshDrafts.length} draft targeted request(s)`);
+      return { error: null, createdCount: freshDrafts.length };
+    },
+    [
+      canManageCommunityOrg,
+      communityProfiles,
+      organisations,
+      communityGapAnalyses,
+      foodCatalog,
+      targetedRequests,
+      isDemoMode,
+      profile,
+      supabase,
+      refreshAllData,
+      pushToast,
+    ]
+  );
+
+  const approveTargetedDonationRequest: AppContextValue['approveTargetedDonationRequest'] = useCallback(
+    async (requestId, notes) => {
+      const target = targetedRequests.find((tr) => tr.id === requestId);
+      if (!target) return { error: 'Targeted request not found.' };
+      if (!canManageCommunityOrg(target.org_id)) {
+        return { error: 'Forbidden: Only authorised NGO / Community Kitchen users or Administrators may approve targeted requests.' };
+      }
+      if (target.status !== 'DRAFT_GENERATED') {
+        return { error: 'Only DRAFT_GENERATED targeted requests may be approved and published.' };
+      }
+
+      const nowIso = new Date().toISOString();
+      if (isDemoMode) {
+        const linkedMealReqId = makeUuid();
+        const linkedMealRequest: MealRequest = {
+          id: linkedMealReqId,
+          org_id: target.org_id,
+          submitted_by: profile?.id ?? null,
+          portions_needed: target.requested_portions,
+          portions_fulfilled: 0,
+          dietary_pref: target.dietary_pref,
+          urgency_score: target.priority_level === 'CRITICAL' ? 5 : target.priority_level === 'HIGH' ? 4 : 3,
+          wait_started_at: nowIso,
+          intake_channel: 'WEB_PORTAL',
+          required_by: target.required_delivery_date,
+          status: 'OPEN',
+          idempotency_key: null,
+          notes: `[NutriLoop Targeted — ${target.target_nutrient_label}] ${target.reason_summary}${notes ? ` · ${notes}` : ''}`,
+          is_demo: true,
+          created_at: nowIso,
+          updated_at: nowIso,
+        };
+
+        setDemoData((prev) => ({
+          ...prev,
+          requests: [linkedMealRequest, ...prev.requests],
+          targetedRequests: prev.targetedRequests.map((tr) =>
+            tr.id === requestId
+              ? {
+                  ...tr,
+                  status: 'APPROVED_PUBLISHED',
+                  approved_by: profile?.id ?? null,
+                  approved_at: nowIso,
+                  linked_meal_request_id: linkedMealReqId,
+                  updated_at: nowIso,
+                }
+              : tr
+          ),
+          auditLogs: [
+            {
+              id: makeUuid(),
+              actor_id: profile?.id ?? null,
+              actor_label: profile?.full_name,
+              action: 'APPROVE_TARGETED_DONATION_REQUEST',
+              entity_type: 'targeted_donation_requests',
+              entity_id: requestId,
+              metadata: {
+                linked_meal_request_id: linkedMealReqId,
+                nutrient: target.target_nutrient_key,
+                notes: notes ?? '',
+              },
+              created_at: nowIso,
+            },
+            ...prev.auditLogs,
+          ],
+          notifications: [
+            {
+              id: makeUuid(),
+              user_id: prev.profiles.FOOD_DONOR.id,
+              notification_type: 'TARGETED_NUTRITION_NEED',
+              title: `NutriLoop Request: ${target.target_nutrient_label}`,
+              message: `${target.requested_portions} portions (${target.recommended_items.slice(0, 2).join(', ')}) requested to close a ${target.priority_level} nutritional gap.`,
+              read_at: null,
+              created_at: nowIso,
+            },
+            ...prev.notifications,
+          ],
+        }));
+        pushToast(
+          'success',
+          'Targeted request approved & published',
+          'Visible to verified food donors and synced into Meal Requests.'
+        );
+        return { error: null };
+      }
+
+      if (!supabase) return { error: 'Supabase not configured.' };
+      const { error } = await supabase.rpc('approve_targeted_donation_request', {
+        p_request_id: requestId,
+        p_notes: notes ?? null,
+      });
+      if (error) return { error: error.message };
+      await refreshAllData();
+      pushToast('success', 'Targeted request approved & published');
+      return { error: null };
+    },
+    [targetedRequests, canManageCommunityOrg, isDemoMode, profile, supabase, refreshAllData, pushToast]
+  );
+
+  const dismissTargetedDonationRequest: AppContextValue['dismissTargetedDonationRequest'] = useCallback(
+    async (requestId, reason) => {
+      if (!reason.trim() || reason.trim().length < 3) {
+        return { error: 'A dismissal reason is required.' };
+      }
+      const target = targetedRequests.find((tr) => tr.id === requestId);
+      if (!target) return { error: 'Targeted request not found.' };
+      if (!canManageCommunityOrg(target.org_id)) {
+        return { error: 'Forbidden: Only authorised NGO / Community Kitchen users or Administrators may dismiss targeted requests.' };
+      }
+
+      const nowIso = new Date().toISOString();
+      if (isDemoMode) {
+        setDemoData((prev) => ({
+          ...prev,
+          targetedRequests: prev.targetedRequests.map((tr) =>
+            tr.id === requestId ? { ...tr, status: 'DISMISSED', updated_at: nowIso } : tr
+          ),
+          auditLogs: [
+            {
+              id: makeUuid(),
+              actor_id: profile?.id ?? null,
+              actor_label: profile?.full_name,
+              action: 'DISMISS_TARGETED_DONATION_REQUEST',
+              entity_type: 'targeted_donation_requests',
+              entity_id: requestId,
+              metadata: { reason: reason.trim() },
+              created_at: nowIso,
+            },
+            ...prev.auditLogs,
+          ],
+        }));
+        pushToast('info', 'Targeted request dismissed', reason.trim());
+        return { error: null };
+      }
+
+      if (!supabase) return { error: 'Supabase not configured.' };
+      const { error } = await supabase
+        .from('targeted_donation_requests')
+        .update({ status: 'DISMISSED' })
+        .eq('id', requestId);
+      if (error) return { error: error.message };
+      await refreshAllData();
+      pushToast('info', 'Targeted request dismissed');
+      return { error: null };
+    },
+    [targetedRequests, canManageCommunityOrg, isDemoMode, profile, supabase, refreshAllData, pushToast]
+  );
+
+  const upsertFoodCompositionItem: AppContextValue['upsertFoodCompositionItem'] = useCallback(
+    async (payload) => {
+      if (profile?.role !== 'ADMINISTRATOR') {
+        return { error: 'Forbidden: Only Administrators may modify validated food composition reference data.' };
+      }
+      if (!payload.food_code.trim() || !payload.food_name.trim() || !payload.source_dataset.trim()) {
+        return { error: 'Food code, food name, and validated source dataset citation are mandatory.' };
+      }
+      if (payload.standard_portion_grams <= 0 || payload.calories_kcal_per_100g < 0 || payload.protein_g_per_100g < 0) {
+        return { error: 'Nutritional values must be non-negative and portion grams must be positive.' };
+      }
+
+      const nowIso = new Date().toISOString();
+      if (isDemoMode) {
+        const nextItem: FoodCompositionItem = {
+          id: makeUuid(),
+          food_code: payload.food_code.trim().toUpperCase(),
+          food_name: payload.food_name.trim(),
+          food_category: payload.food_category,
+          dietary_type: payload.dietary_type,
+          standard_portion_grams: payload.standard_portion_grams,
+          calories_kcal_per_100g: payload.calories_kcal_per_100g,
+          protein_g_per_100g: payload.protein_g_per_100g,
+          iron_mg_per_100g: payload.iron_mg_per_100g,
+          calcium_mg_per_100g: payload.calcium_mg_per_100g,
+          vitamin_a_mcg_per_100g: payload.vitamin_a_mcg_per_100g,
+          dietary_fibre_g_per_100g: payload.dietary_fibre_g_per_100g,
+          extra_nutrients_per_100g: payload.extra_nutrients_per_100g ?? {},
+          source_dataset: payload.source_dataset.trim(),
+          source_reference: payload.source_reference.trim(),
+          is_active: true,
+        };
+        setDemoData((prev) => {
+          const exists = prev.foodCatalog.some((f) => f.food_code === nextItem.food_code);
+          return {
+            ...prev,
+            foodCatalog: exists
+              ? prev.foodCatalog.map((f) => (f.food_code === nextItem.food_code ? { ...nextItem, id: f.id } : f))
+              : [...prev.foodCatalog, nextItem],
+            auditLogs: [
+              {
+                id: makeUuid(),
+                actor_id: profile.id,
+                actor_label: profile.full_name,
+                action: 'FOOD_COMPOSITION_UPSERTED',
+                entity_type: 'food_composition_reference',
+                entity_id: nextItem.food_code,
+                metadata: { food_name: nextItem.food_name, source: nextItem.source_dataset },
+                created_at: nowIso,
+              },
+              ...prev.auditLogs,
+            ],
+          };
+        });
+        pushToast('success', 'Food composition reference saved', `${payload.food_name} (${payload.source_dataset})`);
+        return { error: null };
+      }
+
+      if (!supabase) return { error: 'Supabase not configured.' };
+      const { error } = await supabase.from('food_composition_reference').upsert(
+        {
+          food_code: payload.food_code.trim().toUpperCase(),
+          food_name: payload.food_name.trim(),
+          food_category: payload.food_category,
+          dietary_type: payload.dietary_type,
+          standard_portion_grams: payload.standard_portion_grams,
+          calories_kcal_per_100g: payload.calories_kcal_per_100g,
+          protein_g_per_100g: payload.protein_g_per_100g,
+          iron_mg_per_100g: payload.iron_mg_per_100g,
+          calcium_mg_per_100g: payload.calcium_mg_per_100g,
+          vitamin_a_mcg_per_100g: payload.vitamin_a_mcg_per_100g,
+          dietary_fibre_g_per_100g: payload.dietary_fibre_g_per_100g,
+          extra_nutrients_per_100g: payload.extra_nutrients_per_100g ?? {},
+          source_dataset: payload.source_dataset.trim(),
+          source_reference: payload.source_reference.trim(),
+          is_active: true,
+        },
+        { onConflict: 'food_code' }
+      );
+      if (error) return { error: error.message };
+      await refreshAllData();
+      pushToast('success', 'Food composition reference saved');
+      return { error: null };
+    },
+    [profile, isDemoMode, supabase, refreshAllData, pushToast]
+  );
+
+  const addCustomNutrientConfig: AppContextValue['addCustomNutrientConfig'] = useCallback(
+    async (payload) => {
+      if (profile?.role !== 'ADMINISTRATOR') {
+        return { error: 'Forbidden: Only Administrators may configure tracked nutrients.' };
+      }
+      const cleanKey = payload.nutrient_key.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
+      if (!cleanKey || !payload.display_name.trim() || !payload.unit.trim()) {
+        return { error: 'Nutrient key, display name, and unit are required.' };
+      }
+      if (payload.adult_daily_rda <= 0 || payload.priority_weight <= 0 || payload.priority_weight > 1) {
+        return { error: 'Adult daily RDA must be positive and priority weight must be in (0, 1].' };
+      }
+      if (nutrientConfigs.some((n) => n.nutrient_key === cleanKey)) {
+        return { error: `Nutrient key "${cleanKey}" is already configured.` };
+      }
+
+      const nowIso = new Date().toISOString();
+      if (isDemoMode) {
+        const cfg: NutrientConfig = {
+          id: makeUuid(),
+          nutrient_key: cleanKey,
+          display_name: payload.display_name.trim(),
+          unit: payload.unit.trim(),
+          adult_daily_rda: payload.adult_daily_rda,
+          priority_weight: payload.priority_weight,
+          source_guideline: payload.source_guideline.trim() || 'ICMR-NIN RDA 2020',
+          is_core: false,
+          is_enabled: true,
+        };
+        setDemoData((prev) => ({
+          ...prev,
+          nutrientConfigs: [...prev.nutrientConfigs, cfg],
+          auditLogs: [
+            {
+              id: makeUuid(),
+              actor_id: profile.id,
+              actor_label: profile.full_name,
+              action: 'NUTRIENT_CONFIG_ADDED',
+              entity_type: 'nutrient_configurations',
+              entity_id: cleanKey,
+              metadata: { display_name: cfg.display_name, unit: cfg.unit, rda: cfg.adult_daily_rda },
+              created_at: nowIso,
+            },
+            ...prev.auditLogs,
+          ],
+        }));
+        pushToast('success', `Nutrient added: ${cfg.display_name}`, `Adult RDA: ${cfg.adult_daily_rda} ${cfg.unit}`);
+        return { error: null };
+      }
+
+      if (!supabase) return { error: 'Supabase not configured.' };
+      const { error } = await supabase.from('nutrient_configurations').insert({
+        nutrient_key: cleanKey,
+        display_name: payload.display_name.trim(),
+        unit: payload.unit.trim(),
+        adult_daily_rda: payload.adult_daily_rda,
+        priority_weight: payload.priority_weight,
+        source_guideline: payload.source_guideline.trim() || 'ICMR-NIN RDA 2020',
+        is_core: false,
+        is_enabled: true,
+      });
+      if (error) return { error: error.message };
+      await refreshAllData();
+      pushToast('success', `Nutrient added: ${payload.display_name}`);
+      return { error: null };
+    },
+    [profile, nutrientConfigs, isDemoMode, supabase, refreshAllData, pushToast]
+  );
+
   const value: AppContextValue = {
     isDemoMode,
     isSupabaseConfigured: supabaseConfigStatus.isConfigured,
@@ -1764,6 +2667,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     incidents,
     notifications,
     auditLogs,
+    foodCatalog,
+    nutrientConfigs,
+    communityProfiles,
+    communityInventory,
+    targetedRequests,
+    nutritionalSnapshots,
+    communityGapAnalyses,
     refreshAllData,
     registerOrganisation,
     createDonationBatch,
@@ -1782,6 +2692,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     reportIncident,
     updateIncidentStatus,
     markNotificationRead,
+    upsertCommunityNutritionProfile,
+    recordCommunityInventory,
+    generateTargetedRequestsForOrg,
+    approveTargetedDonationRequest,
+    dismissTargetedDonationRequest,
+    upsertFoodCompositionItem,
+    addCustomNutrientConfig,
     toasts,
     pushToast,
     dismissToast,

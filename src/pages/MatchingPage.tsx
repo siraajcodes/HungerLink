@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { CheckCircle2, GitMerge, Play, ShieldAlert, SlidersHorizontal } from 'lucide-react';
+import { CheckCircle2, GitMerge, Play, ShieldAlert, SlidersHorizontal, Sprout } from 'lucide-react';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { useApp } from '../context/AppContext';
 import {
@@ -16,6 +16,9 @@ export const MatchingPage: React.FC = () => {
     requests,
     organisations,
     allocations,
+    foodCatalog,
+    nutrientConfigs,
+    communityGapAnalyses,
     proposeSplitAllocations,
     approveAllocation,
     t,
@@ -29,6 +32,8 @@ export const MatchingPage: React.FC = () => {
   );
   const [deliveryCapacity, setDeliveryCapacity] = useState('120');
   const [safetyBufferMin, setSafetyBufferMin] = useState(String(DEFAULT_SAFETY_BUFFER_MINUTES));
+  const [useNutriLoop, setUseNutriLoop] = useState(true);
+  const [showWeights, setShowWeights] = useState(false);
   const [result, setResult] = useState<MatchingResult | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [approvingAlloc, setApprovingAlloc] = useState<Allocation | null>(null);
@@ -47,12 +52,21 @@ export const MatchingPage: React.FC = () => {
         recipientOrg: organisations.find((o) => o.id === r.org_id),
       }));
 
+    const hasProfiles = Object.keys(communityGapAnalyses).length > 0;
     const output = runSmartMatchingEngine({
       batch: selectedBatch,
       donorOrg,
       requests: openRequests,
       deliveryCapacityPortions: Math.max(0, Number(deliveryCapacity) || 0),
       safetyBufferMinutes: Math.max(15, Number(safetyBufferMin) || DEFAULT_SAFETY_BUFFER_MINUTES),
+      nutritionContext:
+        useNutriLoop && hasProfiles
+          ? {
+              communityAnalysesByOrgId: communityGapAnalyses,
+              foodCatalog,
+              nutrientConfigs,
+            }
+          : undefined,
     });
     setResult(output);
   };
@@ -74,19 +88,34 @@ export const MatchingPage: React.FC = () => {
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h2 className="text-2xl font-extrabold font-display text-[#123B35]">
-            {t.matching.title}
+            Match Food to Shelters
           </h2>
           <p className="mt-1 text-sm text-[#64748B]">
-            {t.matching.subtitle} Formula: <span className="font-mono font-semibold text-[#123B35]">{t.matching.formulaLabel}</span>
+            Checks food safety first, then pairs available meals with the shelters that need them most.
           </p>
         </div>
       </div>
 
       {/* Matching Configuration Bar */}
       <section className="rounded-2xl bg-white border border-[#123B35]/10 p-6 space-y-4">
-        <div className="flex items-center gap-2 text-xs font-bold text-[#123B35]">
-          <SlidersHorizontal className="w-4 h-4" />
-          Deterministic Matching Parameters
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-xs font-bold text-[#123B35]">
+            <SlidersHorizontal className="w-4 h-4" />
+            Deterministic Matching Parameters
+          </div>
+          <label className="inline-flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-[#123B35]">
+            <input
+              type="checkbox"
+              checked={useNutriLoop}
+              onChange={(e) => {
+                setUseNutriLoop(e.target.checked);
+                setResult(null);
+              }}
+              className="w-4 h-4 accent-[#123B35]"
+            />
+            <Sprout className="w-3.5 h-3.5 text-[#123B35]" />
+            <span>NutriLoop Nutrition-Aware Priority (Safety Gate Always Runs First)</span>
+          </label>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
@@ -206,17 +235,39 @@ export const MatchingPage: React.FC = () => {
 
           {result.proposals.length > 0 && (
             <div className="space-y-4">
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowWeights((v) => !v)}
+                  className="text-xs font-semibold text-[#64748B] hover:text-[#123B35]"
+                >
+                  {showWeights ? 'Hide score weights' : 'Show score breakdown (L/U/Q/T/N)'}
+                </button>
+              </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-[#123B35]/10 text-xs font-semibold text-[#64748B]">
-                      <th className="py-2.5 pr-4">Recipient Organisation</th>
-                      <th className="py-2.5 px-3 text-right">Proposed / Needed</th>
-                      <th className="py-2.5 px-3 text-right">L (0.35)</th>
-                      <th className="py-2.5 px-3 text-right">U (0.30)</th>
-                      <th className="py-2.5 px-3 text-right">Q (0.20)</th>
-                      <th className="py-2.5 px-3 text-right">T (0.15)</th>
-                      <th className="py-2.5 pl-3 text-right">Total S</th>
+                      <th className="py-2.5 pr-4">Shelter / Community</th>
+                      <th className="py-2.5 px-3 text-right">Meals</th>
+                      {showWeights && (
+                        <>
+                          <th className="py-2.5 px-3 text-right">
+                            L ({result.proposals[0]?.match_explanation.nutrition_mode ? '0.25' : '0.35'})
+                          </th>
+                          <th className="py-2.5 px-3 text-right">
+                            U ({result.proposals[0]?.match_explanation.nutrition_mode ? '0.20' : '0.30'})
+                          </th>
+                          <th className="py-2.5 px-3 text-right">
+                            Q ({result.proposals[0]?.match_explanation.nutrition_mode ? '0.15' : '0.20'})
+                          </th>
+                          <th className="py-2.5 px-3 text-right">T (0.15)</th>
+                          {result.proposals[0]?.match_explanation.nutrition_mode && (
+                            <th className="py-2.5 px-3 text-right text-[#123B35]">N (0.25)</th>
+                          )}
+                        </>
+                      )}
+                      <th className="py-2.5 pl-3 text-right">Match</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#123B35]/8 text-sm">
@@ -227,24 +278,38 @@ export const MatchingPage: React.FC = () => {
                           <div className="text-xs text-[#64748B]">
                             {prop.match_explanation.summary}
                           </div>
+                          {prop.match_explanation.nutrition_summary && (
+                            <div className="mt-1 text-xs font-medium text-[#123B35]">
+                              Nutrition: {prop.match_explanation.nutrition_summary}
+                            </div>
+                          )}
                         </td>
                         <td className="py-3 px-3 text-right font-mono tabular-nums text-xs font-bold text-[#123B35]">
                           {prop.allocated_portions} / {prop.portions_needed}
                         </td>
-                        <td className="py-3 px-3 text-right font-mono tabular-nums text-xs text-[#64748B]">
-                          {prop.match_explanation.L.toFixed(2)}
-                        </td>
-                        <td className="py-3 px-3 text-right font-mono tabular-nums text-xs text-[#64748B]">
-                          {prop.match_explanation.U.toFixed(2)}
-                        </td>
-                        <td className="py-3 px-3 text-right font-mono tabular-nums text-xs text-[#64748B]">
-                          {prop.match_explanation.Q.toFixed(2)}
-                        </td>
-                        <td className="py-3 px-3 text-right font-mono tabular-nums text-xs text-[#64748B]">
-                          {prop.match_explanation.T.toFixed(2)}
-                        </td>
+                        {showWeights && (
+                          <>
+                            <td className="py-3 px-3 text-right font-mono tabular-nums text-xs text-[#64748B]">
+                              {prop.match_explanation.L.toFixed(2)}
+                            </td>
+                            <td className="py-3 px-3 text-right font-mono tabular-nums text-xs text-[#64748B]">
+                              {prop.match_explanation.U.toFixed(2)}
+                            </td>
+                            <td className="py-3 px-3 text-right font-mono tabular-nums text-xs text-[#64748B]">
+                              {prop.match_explanation.Q.toFixed(2)}
+                            </td>
+                            <td className="py-3 px-3 text-right font-mono tabular-nums text-xs text-[#64748B]">
+                              {prop.match_explanation.T.toFixed(2)}
+                            </td>
+                            {result.proposals[0]?.match_explanation.nutrition_mode && (
+                              <td className="py-3 px-3 text-right font-mono tabular-nums text-xs font-bold text-[#123B35]">
+                                {(prop.match_explanation.N ?? 0).toFixed(2)}
+                              </td>
+                            )}
+                          </>
+                        )}
                         <td className="py-3 pl-3 text-right font-mono tabular-nums text-sm font-extrabold text-[#123B35]">
-                          {(prop.match_score * 100).toFixed(1)}%
+                          {(prop.match_score * 100).toFixed(0)}%
                         </td>
                       </tr>
                     ))}
@@ -319,9 +384,16 @@ export const MatchingPage: React.FC = () => {
                     <div className="text-xs text-[#64748B] font-mono tabular-nums">
                       Score {(alloc.match_score * 100).toFixed(1)}% (L={exp?.L?.toFixed(2) ?? '—'}, U=
                       {exp?.U?.toFixed(2) ?? '—'}, Q={exp?.Q?.toFixed(2) ?? '—'}, T=
-                      {exp?.T?.toFixed(2) ?? '—'}) · {exp?.algorithm_version ?? 'v2.0'}
+                      {exp?.T?.toFixed(2) ?? '—'}
+                      {exp?.nutrition_mode ? `, N=${(exp.N ?? 0).toFixed(2)}` : ''}) ·{' '}
+                      {exp?.algorithm_version ?? 'v2.0'}
                     </div>
                     {exp?.summary && <div className="text-xs text-[#64748B]">{exp.summary}</div>}
+                    {exp?.nutrition_summary && (
+                      <div className="text-xs font-medium text-[#123B35]">
+                        NutriLoop: {exp.nutrition_summary}
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-3 shrink-0">

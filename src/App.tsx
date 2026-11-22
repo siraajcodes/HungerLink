@@ -13,19 +13,22 @@ import { ImpactLedgerPage } from './pages/ImpactLedgerPage';
 import { MatchingPage } from './pages/MatchingPage';
 import { MealTracePage } from './pages/MealTracePage';
 import { NotificationsPage } from './pages/NotificationsPage';
+import { NutriLoopPage } from './pages/NutriLoopPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { RequestsPage } from './pages/RequestsPage';
 import { RescueRoutePage } from './pages/RescueRoutePage';
 import { SetupGuidePage } from './pages/SetupGuidePage';
 
 const AppRoutes: React.FC = () => {
-  const { session, isDemoMode, authLoading } = useApp();
+  const { session, isDemoMode, authLoading, language } = useApp();
   const isAuthorizedSession = isDemoMode || Boolean(session?.user);
 
   if (authLoading) {
     return (
       <div className="min-h-screen bg-[#FFF9EF] text-[#123B35] flex items-center justify-center">
-        <div className="text-sm font-medium text-[#64748B]">Restoring Supabase session...</div>
+        <div className="text-sm font-medium text-[#64748B]">
+          {language === 'ta' ? 'அமர்வு ஏற்றப்படுகிறது...' : 'Restoring Supabase session...'}
+        </div>
       </div>
     );
   }
@@ -55,6 +58,7 @@ const AppRoutes: React.FC = () => {
                 <Route path="/mealtrace" element={<MealTracePage />} />
                 <Route path="/field-intake" element={<FieldIntakePage />} />
                 <Route path="/impact" element={<ImpactLedgerPage />} />
+                <Route path="/nutriloop" element={<NutriLoopPage />} />
                 <Route path="/admin" element={<AdminPage />} />
                 <Route path="/onboarding" element={<OnboardingPage />} />
                 <Route path="/notifications" element={<NotificationsPage />} />

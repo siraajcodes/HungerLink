@@ -19,10 +19,12 @@
 }
 
 @layer base {
-  html {
+  html, body {
     font-family: var(--font-sans);
     background-color: #FFF9EF;
     color: #123B35;
+    overflow-x: clip;
+    -webkit-tap-highlight-color: transparent;
   }
 
   h1, h2, h3, h4, .font-display {

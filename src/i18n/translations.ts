@@ -13,6 +13,7 @@ export interface TranslationDictionary {
     mealtrace: string;
     fieldIntake: string;
     impact: string;
+    nutriloop: string;
     admin: string;
     notifications: string;
     onboarding: string;
@@ -110,6 +111,22 @@ export interface TranslationDictionary {
     pendingQueue: string;
     noSmartphoneNotice: string;
   };
+  nutriloop: {
+    title: string;
+    subtitle: string;
+    sdgMessage: string;
+    gapFormula: string;
+    matchingFormula: string;
+    generateRequests: string;
+    approveAndPublish: string;
+    inventoryNotice: string;
+    disclaimer: string;
+    tabOverview: string;
+    tabTargeted: string;
+    tabInventory: string;
+    tabImpact: string;
+    tabReference: string;
+  };
 }
 
 export const translations: Record<SupportedLanguage, TranslationDictionary> = {
@@ -126,6 +143,7 @@ export const translations: Record<SupportedLanguage, TranslationDictionary> = {
       mealtrace: 'MealTrace QR',
       fieldIntake: 'Field Intake',
       impact: 'ImpactLedger',
+      nutriloop: 'NutriLoop',
       admin: 'Administration',
       notifications: 'Notifications',
       onboarding: 'Organisation Profile',
@@ -227,24 +245,41 @@ export const translations: Record<SupportedLanguage, TranslationDictionary> = {
       noSmartphoneNotice:
         'Recipients do not need smartphones or app accounts. Field workers log verified requests via phone, walk-in, or outreach visits.',
     },
+    nutriloop: {
+      title: 'NutriLoop — Nutritional Gap Detection & Correction',
+      subtitle: 'UN SDG 2 (Zero Hunger): Identify community nutritional shortages, generate targeted requests, and prioritize high-impact surplus rescues.',
+      sdgMessage: "HungerLink doesn't just rescue surplus food. It identifies what communities are missing and helps deliver food that addresses their nutritional needs.",
+      gapFormula: 'G(j) = max(0, R(j) - A(j))',
+      matchingFormula: 'S = 0.25L + 0.20U + 0.15Q + 0.15T + 0.25N (Safety Gate First)',
+      generateRequests: 'Generate Targeted Requests',
+      approveAndPublish: 'Approve & Publish to Donors',
+      inventoryNotice: 'Community food inventory indicates estimated nutritional availability — not proof that every individual consumed those nutrients.',
+      disclaimer: 'Inventory availability estimates community-level supply, not verified individual consumption.',
+      tabOverview: 'Gap Overview',
+      tabTargeted: 'Targeted Requests',
+      tabInventory: 'Profiles & Inventory',
+      tabImpact: 'Impact Measurement',
+      tabReference: 'Reference & Config',
+    },
   },
   ta: {
-    brand: 'HUNGERLINK',
+    brand: 'ஹங்கர்லிங்க்',
     tagline: 'ஒவ்வொரு உணவையும் தேவையுள்ளவரிடம் சேர்க்கும் பாலம்.',
     nav: {
-      dashboard: 'முகப்புப் பலகை',
-      donations: 'உணவு தானங்கள்',
-      requests: 'உணவு கோரிக்கைகள்',
+      dashboard: 'முகப்பு',
+      donations: 'உணவு தானம்',
+      requests: 'உணவு கோரிக்கை',
       matching: 'திறன் பொருத்தம்',
       safety: 'உணவுப் பாதுகாப்பு',
-      routes: 'விநியோக வழித்தடம்',
-      mealtrace: 'MealTrace QR தடம்',
+      routes: 'விநியோகங்கள்',
+      mealtrace: 'QR ஸ்கேன்',
       fieldIntake: 'களப் பதிவு',
       impact: 'தாக்க அறிக்கை',
+      nutriloop: 'ஊட்டச்சத்து',
       admin: 'நிர்வாக மையம்',
       notifications: 'அறிவிப்புகள்',
       onboarding: 'நிறுவன விவரம்',
-      setup: 'Supabase அமைப்பு',
+      setup: 'தரவுத்தள அமைப்பு',
     },
     roles: {
       FOOD_DONOR: 'உணவு தானதாரர்',
@@ -341,6 +376,22 @@ export const translations: Record<SupportedLanguage, TranslationDictionary> = {
       pendingQueue: 'ஒத்திசைவுக்காகக் காத்திருக்கும் பதிவுகள்',
       noSmartphoneNotice:
         'பயனாளிகள் திறன்பேசி அல்லது செயலி கணக்கு வைத்திருக்கத் தேவையில்லை. களப் பணியாளர்கள் தொலைபேசி அல்லது நேரடிச் சந்திப்பு மூலம் கோரிக்கைகளைப் பதிவு செய்யலாம்.',
+    },
+    nutriloop: {
+      title: 'NutriLoop — ஊட்டச்சத்து இடைவெளி கண்டறிதல் & திருத்த அமைப்பு',
+      subtitle: 'ஐ.நா. SDG 2 (பசியற்ற உலகம்): சமூகத்தின் ஊட்டச்சத்து குறைபாடுகளைக் கண்டறிந்து இலக்கு உணவு கோரிக்கைகளை உருவாக்குதல்.',
+      sdgMessage: 'HungerLink உபரி உணவை மீட்பதோடு மட்டுமல்லாமல், சமூகங்களுக்கு என்ன ஊட்டச்சத்து குறைவாக உள்ளது என்பதைக் கண்டறிந்து சரியான உணவைச் சேர்க்கிறது.',
+      gapFormula: 'G(j) = max(0, R(j) - A(j))',
+      matchingFormula: 'S = 0.25L + 0.20U + 0.15Q + 0.15T + 0.25N (பாதுகாப்பு முதலில்)',
+      generateRequests: 'இலக்கு கோரிக்கைகளை உருவாக்குக',
+      approveAndPublish: 'அங்கீகரித்து தானதாரர்களுக்கு வெளியிடுக',
+      inventoryNotice: 'சமூக உணவு இருப்பு என்பது மதிப்பிடப்பட்ட ஊட்டச்சத்து கிடைப்பை மட்டுமே குறிக்கும்; ஒவ்வொரு நபரும் அதை உட்கொண்டதற்கான ஆதாரம் அல்ல.',
+      disclaimer: 'உணவு இருப்பு என்பது மதிப்பிடப்பட்ட ஊட்டச்சத்து கிடைப்பையே குறிக்கும்; தனிநபர் உட்கொள்ளலுக்குச் சான்றல்ல.',
+      tabOverview: 'இடைவெளி பகுப்பாய்வு',
+      tabTargeted: 'இலக்கு கோரிக்கைகள்',
+      tabInventory: 'சுயவிவரம் & இருப்பு',
+      tabImpact: 'தாக்க அளவீடு',
+      tabReference: 'ஆதார தரவு & அமைப்பு',
     },
   },
 };

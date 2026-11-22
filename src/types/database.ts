@@ -146,6 +146,7 @@ export interface DonationBatch {
   created_by: string | null;
   food_item: string;
   food_category: string;
+  food_composition_id?: string | null;
   dietary_type: DietaryType;
   portions_available: number;
   portions_allocated: number;
@@ -191,6 +192,10 @@ export interface MatchExplanation {
   U: number;
   Q: number;
   T: number;
+  N?: number;
+  nutrition_mode?: boolean;
+  nutrition_summary?: string;
+  nutrition_addressed_gaps?: Array<{ nutrient: string; closurePct: number; addedAmount: number; unit: string }>;
   total_score: number;
   distance_km: number;
   est_transit_minutes: number;

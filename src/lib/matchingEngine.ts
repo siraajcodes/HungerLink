@@ -6,12 +6,24 @@ import type {
   MealRequest,
   Organisation,
 } from '../types/database';
+import type {
+  CommunityGapAnalysis,
+  FoodCompositionItem,
+  NutrientConfig,
+} from '../types/nutriloop';
+import { evaluateBatchNutritionalContribution } from './nutriLoopEngine';
 
-export const MATCHING_ALGORITHM_VERSION = 'hungerlink-match-v2.0.0';
+export const MATCHING_ALGORITHM_VERSION = 'hungerlink-match-v2.1.0-nutriloop';
 export const DEFAULT_SAFETY_BUFFER_MINUTES = 45;
 export const MAX_SCORING_DISTANCE_KM = 25;
 export const AVERAGE_CITY_SPEED_KMH = 24;
 export const PICKUP_HANDOVER_OVERHEAD_MIN = 15;
+
+export interface MatchingNutritionContext {
+  communityAnalysesByOrgId: Record<string, CommunityGapAnalysis>;
+  foodCatalog: FoodCompositionItem[];
+  nutrientConfigs: NutrientConfig[];
+}
 
 export interface MatchingInput {
   batch: DonationBatch;
@@ -23,6 +35,7 @@ export interface MatchingInput {
   deliveryCapacityPortions: number;
   safetyBufferMinutes?: number;
   nowMs?: number;
+  nutritionContext?: MatchingNutritionContext;
 }
 
 export interface RejectedCandidate {
@@ -270,22 +283,62 @@ export function runSmartMatchingEngine(input: MatchingInput): MatchingResult {
       clamp01(1 - estTransitMinutes / (availableWindowMin + estTransitMinutes))
     );
 
-    const totalScore = round4(0.35 * L + 0.30 * U + 0.20 * Q + 0.15 * T);
+    // Optional NutriLoop Nutrition-Aware Factor N (runs STRICTLY after safety & eligibility gates pass)
+    const orgAnalysis = input.nutritionContext?.communityAnalysesByOrgId?.[request.org_id];
+    let totalScore: number;
+    let N: number | undefined;
+    let nutritionMode = false;
+    let nutritionSummary: string | undefined;
+    let nutritionAddressedGaps:
+      | Array<{ nutrient: string; closurePct: number; addedAmount: number; unit: string }>
+      | undefined;
+
+    if (input.nutritionContext && orgAnalysis) {
+      const deliverablePortions = Math.min(needed, remainingAvailable, recipientOrg.daily_capacity);
+      const evalNutr = evaluateBatchNutritionalContribution({
+        batch,
+        portionsToDeliver: deliverablePortions,
+        communityAnalysis: orgAnalysis,
+        foodCatalog: input.nutritionContext.foodCatalog,
+        nutrientConfigs: input.nutritionContext.nutrientConfigs,
+      });
+      N = round4(clamp01(evalNutr.scoreN));
+      nutritionMode = true;
+      nutritionSummary = evalNutr.explanation;
+      nutritionAddressedGaps = evalNutr.addressedGaps;
+      // Nutrition-aware deterministic weights: 0.25L + 0.20U + 0.15Q + 0.15T + 0.25N
+      totalScore = round4(0.25 * L + 0.20 * U + 0.15 * Q + 0.15 * T + 0.25 * N);
+    } else {
+      // Standard HungerLink deterministic formula: 0.35L + 0.30U + 0.20Q + 0.15T
+      totalScore = round4(0.35 * L + 0.30 * U + 0.20 * Q + 0.15 * T);
+    }
 
     const explanation: MatchExplanation = {
       L,
       U,
       Q,
       T,
+      ...(nutritionMode
+        ? {
+            N,
+            nutrition_mode: true,
+            nutrition_summary: nutritionSummary,
+            nutrition_addressed_gaps: nutritionAddressedGaps,
+          }
+        : {}),
       total_score: totalScore,
       distance_km: Math.round(distKm * 100) / 100,
       est_transit_minutes: estTransitMinutes,
       safety_buffer_minutes: safetyBufferMinutes,
       algorithm_version: MATCHING_ALGORITHM_VERSION,
       calculated_at: calculatedAt,
-      summary: `Distance ${distKm.toFixed(1)} km (~${estTransitMinutes}m transit), urgency ${(
-        U * 100
-      ).toFixed(0)}%, quantity fit ${(Q * 100).toFixed(0)}%, time margin ${(T * 100).toFixed(0)}%.`,
+      summary: nutritionMode && nutritionSummary
+        ? `Distance ${distKm.toFixed(1)} km (~${estTransitMinutes}m transit), urgency ${(
+            U * 100
+          ).toFixed(0)}%, quantity fit ${(Q * 100).toFixed(0)}%. ${nutritionSummary}`
+        : `Distance ${distKm.toFixed(1)} km (~${estTransitMinutes}m transit), urgency ${(
+            U * 100
+          ).toFixed(0)}%, quantity fit ${(Q * 100).toFixed(0)}%, time margin ${(T * 100).toFixed(0)}%.`,
     };
 
     eligibleScored.push({
