@@ -3,10 +3,17 @@ import { CheckCircle2, GitMerge, Play, ShieldAlert, SlidersHorizontal, Sprout } 
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { useApp } from '../context/AppContext';
 import {
+  formatAllocationStatus,
+  formatFoodName,
+  formatOrgName,
+  tx,
+} from '../i18n/helpers';
+import {
   DEFAULT_SAFETY_BUFFER_MINUTES,
   runSmartMatchingEngine,
   type MatchingResult,
 } from '../lib/matchingEngine';
+import { canPerformAction } from '../lib/rbac';
 import type { Allocation } from '../types/database';
 
 export const MatchingPage: React.FC = () => {
@@ -21,6 +28,7 @@ export const MatchingPage: React.FC = () => {
     communityGapAnalyses,
     proposeSplitAllocations,
     approveAllocation,
+    language,
     t,
   } = useApp();
 
@@ -39,7 +47,7 @@ export const MatchingPage: React.FC = () => {
   const [approvingAlloc, setApprovingAlloc] = useState<Allocation | null>(null);
 
   const selectedBatch = batches.find((b) => b.id === selectedBatchId) ?? candidateBatches[0];
-  const isCoordinator = profile?.role === 'ADMINISTRATOR';
+  const isCoordinator = canPerformAction(profile?.role, 'matching:approve');
 
   const handleRunEngine = () => {
     setErrorMsg(null);
@@ -88,10 +96,14 @@ export const MatchingPage: React.FC = () => {
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h2 className="text-2xl font-extrabold font-display text-[#123B35]">
-            Match Food to Shelters
+            {tx(language, 'Match Food to Shelters', 'உணவை காப்பகங்களுக்குப் பொருத்துக')}
           </h2>
           <p className="mt-1 text-sm text-[#64748B]">
-            Checks food safety first, then pairs available meals with the shelters that need them most.
+            {tx(
+              language,
+              'Checks food safety first, then pairs available meals with the shelters that need them most.',
+              'முதலில் உணவுப் பாதுகாப்பைச் சரிபார்த்து, பின்னர் அதிகத் தேவையுள்ள காப்பகங்களுக்கு உணவுகளைப் பொருத்துகிறது.'
+            )}
           </p>
         </div>
       </div>
@@ -101,7 +113,7 @@ export const MatchingPage: React.FC = () => {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-xs font-bold text-[#123B35]">
             <SlidersHorizontal className="w-4 h-4" />
-            Deterministic Matching Parameters
+            {tx(language, 'Matching Settings', 'பொருத்த அமைப்புகள்')}
           </div>
           <label className="inline-flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-[#123B35]">
             <input
@@ -114,14 +126,20 @@ export const MatchingPage: React.FC = () => {
               className="w-4 h-4 accent-[#123B35]"
             />
             <Sprout className="w-3.5 h-3.5 text-[#123B35]" />
-            <span>NutriLoop Nutrition-Aware Priority (Safety Gate Always Runs First)</span>
+            <span>
+              {tx(
+                language,
+                'NutriLoop Nutrition-Aware Priority (Safety Gate Always Runs First)',
+                'ஊட்டச்சத்து முன்னுரிமை (பாதுகாப்புச் சோதனை எப்போதும் முதலில்)'
+              )}
+            </span>
           </label>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
           <div className="md:col-span-6">
             <label htmlFor="match-batch" className="block text-xs font-semibold text-[#123B35] mb-1">
-              Target Donation Batch
+              {tx(language, 'Target Donation Batch', 'உணவுத் தொகுதி')}
             </label>
             <select
               id="match-batch"
@@ -134,8 +152,12 @@ export const MatchingPage: React.FC = () => {
             >
               {candidateBatches.map((b) => (
                 <option key={b.id} value={b.id}>
-                  {b.batch_code} — {b.food_item} ({b.portions_available - b.portions_allocated} free / {b.portions_available} total ·{' '}
-                  {b.safety_gate_passed ? 'Safety PASSED' : 'Safety NOT PASSED'})
+                  {b.batch_code} — {formatFoodName(b.food_item, language)} (
+                  {b.portions_available - b.portions_allocated} {tx(language, 'free', 'மீதம்')} / {b.portions_available} ·{' '}
+                  {b.safety_gate_passed
+                    ? tx(language, 'Safety PASSED', 'பாதுகாப்பு தேர்ச்சி')
+                    : tx(language, 'Safety NOT PASSED', 'பாதுகாப்பு நிலுவை')}
+                  )
                 </option>
               ))}
             </select>
@@ -143,7 +165,7 @@ export const MatchingPage: React.FC = () => {
 
           <div className="md:col-span-2">
             <label htmlFor="match-cap" className="block text-xs font-semibold text-[#123B35] mb-1">
-              Delivery Cap (portions)
+              {tx(language, 'Delivery Cap', 'வாகனத் திறன்')}
             </label>
             <input
               id="match-cap"
@@ -158,7 +180,7 @@ export const MatchingPage: React.FC = () => {
 
           <div className="md:col-span-2">
             <label htmlFor="match-buf" className="block text-xs font-semibold text-[#123B35] mb-1">
-              Safety Buffer (min)
+              {tx(language, 'Safety Buffer (min)', 'பாதுகாப்பு அவகாசம் (நிமிடம்)')}
             </label>
             <input
               id="match-buf"
@@ -197,19 +219,19 @@ export const MatchingPage: React.FC = () => {
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#123B35]/10 pb-4">
             <div>
               <h3 className="text-base font-bold font-display text-[#123B35]">
-                Split-Batch Proposal &amp; Scoring Audit
+                {tx(language, 'Split-Batch Proposal & Scoring Audit', 'பகுதி ஒதுக்கீடு முன்மொழிவு & மதிப்பீடு')}
               </h3>
               <p className="mt-0.5 text-xs font-mono text-[#64748B]">
-                Algorithm: {result.algorithm_version} · Calculated: {new Date(result.calculated_at).toLocaleTimeString()}
+                {result.algorithm_version} · {new Date(result.calculated_at).toLocaleTimeString()}
               </p>
             </div>
             <div className="flex items-center gap-6 font-mono tabular-nums text-xs">
               <div>
-                <span className="text-[#64748B]">Available: </span>
+                <span className="text-[#64748B]">{tx(language, 'Available:', 'கிடைப்பது:')} </span>
                 <strong className="text-[#123B35]">{result.portions_available}</strong>
               </div>
               <div>
-                <span className="text-[#64748B]">Proposed: </span>
+                <span className="text-[#64748B]">{tx(language, 'Proposed:', 'முன்மொழிவு:')} </span>
                 <strong className="text-[#123B35]">{result.total_proposed}</strong>
               </div>
               <div>
@@ -223,7 +245,11 @@ export const MatchingPage: React.FC = () => {
             <div className="rounded-xl border border-[#FF795C] bg-[#FF795C]/10 p-4 space-y-1">
               <div className="text-xs font-bold text-[#123B35] flex items-center gap-1.5">
                 <ShieldAlert className="w-4 h-4 text-[#FF795C]" />
-                Batch Blocked by Fail-Closed Hard Eligibility Gate
+                {tx(
+                  language,
+                  'Batch Blocked by Fail-Closed Hard Eligibility Gate',
+                  'பாதுகாப்பு மற்றும் தகுதி நிபந்தனையால் உணவுத் தொகுதி தடுக்கப்பட்டது'
+                )}
               </div>
               <ul className="list-disc pl-5 text-xs text-[#123B35] space-y-0.5">
                 {result.batch_hard_errors.map((err) => (
@@ -241,15 +267,17 @@ export const MatchingPage: React.FC = () => {
                   onClick={() => setShowWeights((v) => !v)}
                   className="text-xs font-semibold text-[#64748B] hover:text-[#123B35]"
                 >
-                  {showWeights ? 'Hide score weights' : 'Show score breakdown (L/U/Q/T/N)'}
+                  {showWeights
+                    ? tx(language, 'Hide score weights', 'மதிப்பெண் விவரத்தை மறை')
+                    : tx(language, 'Show score breakdown (L/U/Q/T/N)', 'மதிப்பெண் விவரத்தைக் காட்டு (L/U/Q/T/N)')}
                 </button>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-[#123B35]/10 text-xs font-semibold text-[#64748B]">
-                      <th className="py-2.5 pr-4">Shelter / Community</th>
-                      <th className="py-2.5 px-3 text-right">Meals</th>
+                      <th className="py-2.5 pr-4">{tx(language, 'Shelter / Community', 'காப்பகம் / சமூகம்')}</th>
+                      <th className="py-2.5 px-3 text-right">{tx(language, 'Meals', 'உணவுகள்')}</th>
                       {showWeights && (
                         <>
                           <th className="py-2.5 px-3 text-right">
@@ -267,20 +295,22 @@ export const MatchingPage: React.FC = () => {
                           )}
                         </>
                       )}
-                      <th className="py-2.5 pl-3 text-right">Match</th>
+                      <th className="py-2.5 pl-3 text-right">{tx(language, 'Match', 'பொருத்தம்')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#123B35]/8 text-sm">
                     {result.proposals.map((prop) => (
                       <tr key={prop.meal_request_id}>
                         <td className="py-3 pr-4">
-                          <div className="font-semibold text-[#123B35]">{prop.org_name}</div>
+                          <div className="font-semibold text-[#123B35]">
+                            {formatOrgName(prop.org_name, language)}
+                          </div>
                           <div className="text-xs text-[#64748B]">
                             {prop.match_explanation.summary}
                           </div>
                           {prop.match_explanation.nutrition_summary && (
                             <div className="mt-1 text-xs font-medium text-[#123B35]">
-                              Nutrition: {prop.match_explanation.nutrition_summary}
+                              {tx(language, 'Nutrition:', 'ஊட்டச்சத்து:')} {prop.match_explanation.nutrition_summary}
                             </div>
                           )}
                         </td>
@@ -319,7 +349,11 @@ export const MatchingPage: React.FC = () => {
 
               <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
                 <p className="text-xs text-[#64748B]">
-                  Allocations execute inside a concurrency-safe transaction (<span className="font-mono">SELECT ... FOR UPDATE</span>) and still require Coordinator approval before dispatch.
+                  {tx(
+                    language,
+                    'Allocations execute safely and still require Coordinator approval before dispatch.',
+                    'ஒதுக்கீடுகள் பாதுகாப்பாகச் சேமிக்கப்பட்டு அனுப்புவதற்கு முன் ஒருங்கிணைப்பாளர் ஒப்புதல் தேவை.'
+                  )}
                 </p>
                 <button
                   type="button"
@@ -328,7 +362,7 @@ export const MatchingPage: React.FC = () => {
                   className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#D7F36B] text-[#123B35] text-xs font-bold hover:bg-[#C8E655] disabled:opacity-40"
                 >
                   <GitMerge className="w-4 h-4" />
-                  {t.matching.proposeAllocations} ({result.total_proposed} portions)
+                  {t.matching.proposeAllocations} ({result.total_proposed} {t.common.portions})
                 </button>
               </div>
             </div>
@@ -342,7 +376,9 @@ export const MatchingPage: React.FC = () => {
               <ul className="space-y-2">
                 {result.rejected_candidates.map((rej) => (
                   <li key={rej.meal_request_id} className="text-xs text-[#64748B]">
-                    <span className="font-semibold text-[#123B35]">{rej.org_name}:</span>{' '}
+                    <span className="font-semibold text-[#123B35]">
+                      {formatOrgName(rej.org_name, language)}:
+                    </span>{' '}
                     {rej.reasons.join(' · ')}
                   </li>
                 ))}
@@ -356,16 +392,24 @@ export const MatchingPage: React.FC = () => {
       <section className="rounded-2xl bg-white border border-[#123B35]/10 overflow-hidden">
         <div className="px-6 py-4 border-b border-[#123B35]/10">
           <h3 className="text-base font-bold font-display text-[#123B35]">
-            Recorded Allocations &amp; Coordinator Approvals ({batchAllocations.length})
+            {tx(language, 'Recorded Allocations & Coordinator Approvals', 'பதிவு செய்யப்பட்ட ஒதுக்கீடுகள் & ஒப்புதல்கள்')} ({batchAllocations.length})
           </h3>
           <p className="text-xs text-[#64748B]">
-            Inspect exact match factor explanations and approve final allocations before RescueRoute dispatch.
+            {tx(
+              language,
+              'Review match explanations and approve final allocations before delivery dispatch.',
+              'பொருத்த விவரங்களைப் பரிசீலித்து விநியோகத்திற்கு முன் ஒதுக்கீடுகளை அங்கீகரிக்கவும்.'
+            )}
           </p>
         </div>
 
         {batchAllocations.length === 0 ? (
           <div className="p-8 text-center text-sm text-[#64748B]">
-            No allocations recorded for the selected batch yet. Click &ldquo;{t.matching.runEngine}&rdquo; above to compute deterministic split-batch candidates.
+            {tx(
+              language,
+              `No allocations recorded for the selected batch yet. Click "${t.matching.runEngine}" above to compute candidates.`,
+              `இந்த உணவுத் தொகுதிக்கு இதுவரை ஒதுக்கீடு இல்லை. மேலே உள்ள "${t.matching.runEngine}" பொத்தானை அழுத்தவும்.`
+            )}
           </div>
         ) : (
           <div className="divide-y divide-[#123B35]/8">
@@ -378,11 +422,13 @@ export const MatchingPage: React.FC = () => {
                 <div key={alloc.id} className="p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                   <div className="space-y-1">
                     <div className="text-sm font-bold text-[#123B35]">
-                      {org?.name ?? 'Verified Recipient'} ·{' '}
-                      <span className="font-mono">{alloc.allocated_portions} portions</span>
+                      {formatOrgName(org?.name, language) || tx(language, 'Verified Recipient', 'சரிபார்க்கப்பட்ட பெறுநர்')} ·{' '}
+                      <span className="font-mono">
+                        {alloc.allocated_portions} {t.common.portions}
+                      </span>
                     </div>
                     <div className="text-xs text-[#64748B] font-mono tabular-nums">
-                      Score {(alloc.match_score * 100).toFixed(1)}% (L={exp?.L?.toFixed(2) ?? '—'}, U=
+                      {tx(language, 'Score', 'மதிப்பெண்')} {(alloc.match_score * 100).toFixed(1)}% (L={exp?.L?.toFixed(2) ?? '—'}, U=
                       {exp?.U?.toFixed(2) ?? '—'}, Q={exp?.Q?.toFixed(2) ?? '—'}, T=
                       {exp?.T?.toFixed(2) ?? '—'}
                       {exp?.nutrition_mode ? `, N=${(exp.N ?? 0).toFixed(2)}` : ''}) ·{' '}
@@ -391,13 +437,15 @@ export const MatchingPage: React.FC = () => {
                     {exp?.summary && <div className="text-xs text-[#64748B]">{exp.summary}</div>}
                     {exp?.nutrition_summary && (
                       <div className="text-xs font-medium text-[#123B35]">
-                        NutriLoop: {exp.nutrition_summary}
+                        {tx(language, 'Nutrition:', 'ஊட்டச்சத்து:')} {exp.nutrition_summary}
                       </div>
                     )}
                   </div>
 
                   <div className="flex items-center gap-3 shrink-0">
-                    <span className="text-xs font-bold text-[#123B35]">{alloc.status}</span>
+                    <span className="text-xs font-bold text-[#123B35]">
+                      {formatAllocationStatus(alloc.status, language)}
+                    </span>
                     {alloc.status === 'PROPOSED' && isCoordinator && (
                       <button
                         type="button"
@@ -418,12 +466,20 @@ export const MatchingPage: React.FC = () => {
 
       <ConfirmDialog
         open={Boolean(approvingAlloc)}
-        title="Approve Allocation for Dispatch"
-        description={`Confirm coordinator approval for ${approvingAlloc?.allocated_portions ?? 0} portions. This logs an immutable MealTrace & Audit entry.`}
-        confirmLabel="Approve Allocation"
+        title={tx(language, 'Approve Allocation for Dispatch', 'விநியோகத்திற்கு ஒதுக்கீட்டை அங்கீகரி')}
+        description={tx(
+          language,
+          `Confirm coordinator approval for ${approvingAlloc?.allocated_portions ?? 0} portions. This logs an immutable audit entry.`,
+          `${approvingAlloc?.allocated_portions ?? 0} பங்குகளுக்கான ஒருங்கிணைப்பாளர் ஒப்புதலை உறுதிப்படுத்தவும்.`
+        )}
+        confirmLabel={t.matching.approveDispatch}
         requireReason
-        reasonLabel="Coordinator Verification Note"
-        reasonPlaceholder="e.g. Verified receiving window and delivery capacity."
+        reasonLabel={tx(language, 'Coordinator Verification Note', 'ஒருங்கிணைப்பாளர் சரிபார்ப்புக் குறிப்பு')}
+        reasonPlaceholder={tx(
+          language,
+          'e.g. Verified receiving window and delivery capacity.',
+          'எ.கா. பெறுதல் நேரமும் விநியோகத் திறனும் சரிபார்க்கப்பட்டது.'
+        )}
         onCancel={() => setApprovingAlloc(null)}
         onConfirm={async (reason) => {
           if (!approvingAlloc) return;

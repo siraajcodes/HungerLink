@@ -2,6 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { CloudOff, RefreshCw, Smartphone, Trash2, Wifi } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import {
+  formatDietary,
+  formatIntakeChannel,
+  formatOrgName,
+  tx,
+} from '../i18n/helpers';
+import {
   enqueueOfflineDraft,
   loadOfflineDrafts,
   removeOfflineDraft,
@@ -18,7 +24,7 @@ function toLocalDateTimeInput(offsetMinutes: number): string {
 }
 
 export const FieldIntakePage: React.FC = () => {
-  const { organisations, createMealRequest, pushToast, t } = useApp();
+  const { organisations, createMealRequest, pushToast, language, t } = useApp();
 
   const verifiedRecipients = organisations.filter(
     (o) =>
@@ -77,7 +83,11 @@ export const FieldIntakePage: React.FC = () => {
       pushToast(
         'info',
         'Saved to Offline Sync Queue',
-        `Idempotency key ${queued.idempotency_key.slice(0, 8)} queued for safe synchronisation.`
+        tx(
+          language,
+          `Idempotency key ${queued.idempotency_key.slice(0, 8)} queued for safe synchronisation.`,
+          `குறியீடு ${queued.idempotency_key.slice(0, 8)} பாதுகாப்பான ஒத்திசைவிற்குச் சேமிக்கப்பட்டது.`
+        )
       );
       return;
     }
@@ -141,7 +151,7 @@ export const FieldIntakePage: React.FC = () => {
             onChange={(e) => setSimulateOffline(e.target.checked)}
             className="accent-[#123B35]"
           />
-          Test Offline Queue Mode
+          {tx(language, 'Test Offline Queue Mode', 'இணையமில்லா முறையைச் சோதி')}
         </label>
       </div>
 
@@ -175,12 +185,12 @@ export const FieldIntakePage: React.FC = () => {
           className="xl:col-span-6 rounded-2xl bg-white border border-[#123B35]/10 p-6 space-y-4"
         >
           <h3 className="text-base font-bold font-display text-[#123B35]">
-            Register Assisted Meal Request
+            {tx(language, 'Register Assisted Meal Request', 'உதவி உணவு கோரிக்கையைப் பதிவு செய்')}
           </h3>
 
           <div>
             <label htmlFor="fi-org" className="block text-xs font-semibold text-[#123B35] mb-1">
-              Verified Receiving Organisation *
+              {tx(language, 'Verified Receiving Organisation *', 'சரிபார்க்கப்பட்ட பெறும் நிறுவனம் *')}
             </label>
             <select
               id="fi-org"
@@ -191,7 +201,7 @@ export const FieldIntakePage: React.FC = () => {
             >
               {verifiedRecipients.map((o) => (
                 <option key={o.id} value={o.id}>
-                  {o.name}
+                  {formatOrgName(o.name, language)}
                 </option>
               ))}
             </select>
@@ -200,7 +210,7 @@ export const FieldIntakePage: React.FC = () => {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label htmlFor="fi-channel" className="block text-xs font-semibold text-[#123B35] mb-1">
-                Intake Channel *
+                {tx(language, 'Intake Channel *', 'பதிவு வழி *')}
               </label>
               <select
                 id="fi-channel"
@@ -208,15 +218,19 @@ export const FieldIntakePage: React.FC = () => {
                 onChange={(e) => setIntakeChannel(e.target.value as IntakeChannel)}
                 className="w-full rounded-xl border border-[#123B35]/20 bg-[#FFF9EF]/40 px-3 py-2 text-sm"
               >
-                <option value="FIELD_ASSISTED_PHONE">Phone Helpline Call</option>
-                <option value="FIELD_ASSISTED_WALKIN">Walk-In Community Desk</option>
-                <option value="FIELD_ASSISTED_OUTREACH">Mobile Outreach Visit</option>
+                {(['FIELD_ASSISTED_PHONE', 'FIELD_ASSISTED_WALKIN', 'FIELD_ASSISTED_OUTREACH'] as IntakeChannel[]).map(
+                  (ch) => (
+                    <option key={ch} value={ch}>
+                      {formatIntakeChannel(ch, language)}
+                    </option>
+                  )
+                )}
               </select>
             </div>
 
             <div>
               <label htmlFor="fi-portions" className="block text-xs font-semibold text-[#123B35] mb-1">
-                Portions Needed *
+                {tx(language, 'Portions Needed *', 'தேவையான பங்குகள் *')}
               </label>
               <input
                 id="fi-portions"
@@ -232,7 +246,7 @@ export const FieldIntakePage: React.FC = () => {
 
             <div>
               <label htmlFor="fi-diet" className="block text-xs font-semibold text-[#123B35] mb-1">
-                Dietary Preference *
+                {tx(language, 'Dietary Preference *', 'உணவு விருப்பம் *')}
               </label>
               <select
                 id="fi-diet"
@@ -240,17 +254,17 @@ export const FieldIntakePage: React.FC = () => {
                 onChange={(e) => setDietaryPref(e.target.value as DietaryPreference)}
                 className="w-full rounded-xl border border-[#123B35]/20 bg-[#FFF9EF]/40 px-3 py-2 text-sm"
               >
-                <option value="VEGETARIAN">Vegetarian</option>
-                <option value="ANY">Any</option>
-                <option value="VEGAN">Vegan</option>
-                <option value="JAIN">Jain</option>
-                <option value="HALAL">Halal</option>
+                {(['VEGETARIAN', 'ANY', 'VEGAN', 'JAIN', 'HALAL'] as DietaryPreference[]).map((d) => (
+                  <option key={d} value={d}>
+                    {formatDietary(d, language)}
+                  </option>
+                ))}
               </select>
             </div>
 
             <div>
               <label htmlFor="fi-urgency" className="block text-xs font-semibold text-[#123B35] mb-1">
-                Urgency (0.10 – 1.00)
+                {tx(language, 'Urgency (0.10 – 1.00)', 'அவசர அளவு (0.10 – 1.00)')}
               </label>
               <input
                 id="fi-urgency"
@@ -267,7 +281,7 @@ export const FieldIntakePage: React.FC = () => {
 
           <div>
             <label htmlFor="fi-reqby" className="block text-xs font-semibold text-[#123B35] mb-1">
-              Required By *
+              {tx(language, 'Required By *', 'தேவைப்படும் நேரம் *')}
             </label>
             <input
               id="fi-reqby"
@@ -281,14 +295,18 @@ export const FieldIntakePage: React.FC = () => {
 
           <div>
             <label htmlFor="fi-notes" className="block text-xs font-semibold text-[#123B35] mb-1">
-              Non-PII Coordination Notes
+              {tx(language, 'Coordination Notes (No Personal Data)', 'ஒருங்கிணைப்புக் குறிப்புகள்')}
             </label>
             <textarea
               id="fi-notes"
               rows={2}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Avoid storing personal phone/ID numbers in offline drafts."
+              placeholder={tx(
+                language,
+                'Avoid storing personal phone/ID numbers in offline drafts.',
+                'தனிப்பட்ட தொலைபேசி அல்லது அடையாள எண்களை இங்கே எழுத வேண்டாம்.'
+              )}
               className="w-full rounded-xl border border-[#123B35]/20 bg-[#FFF9EF]/40 px-3 py-2 text-sm"
             />
           </div>
@@ -298,7 +316,9 @@ export const FieldIntakePage: React.FC = () => {
             disabled={verifiedRecipients.length === 0}
             className="w-full px-4 py-2.5 rounded-xl bg-[#123B35] text-white text-xs font-semibold hover:bg-[#0B2723] disabled:opacity-40"
           >
-            {effectiveOnline ? 'Submit Assisted Request' : t.field.saveToOfflineQueue}
+            {effectiveOnline
+              ? tx(language, 'Submit Assisted Request', 'உதவி கோரிக்கையைச் சமர்ப்பி')
+              : t.field.saveToOfflineQueue}
           </button>
         </form>
 
@@ -310,7 +330,11 @@ export const FieldIntakePage: React.FC = () => {
                 {t.field.pendingQueue} ({pendingCount})
               </h3>
               <p className="text-xs text-[#64748B]">
-                Local storage holds only pending drafts; Supabase remains the single system of record.
+                {tx(
+                  language,
+                  'Pending drafts stay on this device until synced to the main database.',
+                  'ஒத்திசைக்கும் வரை நிலுவைப் பதிவுகள் இந்தச் சாதனத்தில் பாதுகாப்பாக இருக்கும்.'
+                )}
               </p>
             </div>
             <button
@@ -326,8 +350,11 @@ export const FieldIntakePage: React.FC = () => {
 
           {drafts.length === 0 ? (
             <div className="p-8 text-center text-sm text-[#64748B]">
-              No local offline drafts queued. Toggle &ldquo;Test Offline Queue Mode&rdquo; above to
-              verify idempotent offline capture and sync.
+              {tx(
+                language,
+                'No local offline drafts queued yet.',
+                'இணையமில்லா வரிசையில் பதிவுகள் எதுவும் இல்லை.'
+              )}
             </div>
           ) : (
             <ul className="divide-y divide-[#123B35]/8">
@@ -335,11 +362,20 @@ export const FieldIntakePage: React.FC = () => {
                 <li key={draft.idempotency_key} className="p-5 flex items-start justify-between gap-4">
                   <div className="space-y-1">
                     <div className="text-sm font-bold text-[#123B35]">
-                      {draft.org_name} · <span className="font-mono">{draft.portions_needed} portions</span>
+                      {formatOrgName(draft.org_name, language)} ·{' '}
+                      <span className="font-mono">
+                        {draft.portions_needed} {t.common.portions}
+                      </span>
                     </div>
                     <div className="text-xs text-[#64748B] font-mono">
-                      Key: {draft.idempotency_key.slice(0, 12)}… · {draft.intake_channel} ·{' '}
-                      <strong>{draft.sync_status}</strong>
+                      {draft.idempotency_key.slice(0, 12)}… · {formatIntakeChannel(draft.intake_channel, language)} ·{' '}
+                      <strong>
+                        {draft.sync_status === 'SYNCED'
+                          ? tx(language, 'Synced', 'ஒத்திசைக்கப்பட்டது')
+                          : draft.sync_status === 'FAILED'
+                          ? tx(language, 'Failed', 'தோல்வி')
+                          : tx(language, 'Pending', 'நிலுவையில்')}
+                      </strong>
                     </div>
                     {draft.last_error && (
                       <div className="text-xs text-[#FF795C] font-medium">{draft.last_error}</div>
@@ -348,7 +384,7 @@ export const FieldIntakePage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setDrafts(removeOfflineDraft(draft.idempotency_key))}
-                    aria-label="Remove local draft"
+                    aria-label={tx(language, 'Remove local draft', 'வரைவை நீக்கு')}
                     className="p-1.5 rounded-lg text-[#64748B] hover:text-[#FF795C]"
                   >
                     <Trash2 className="w-4 h-4" />

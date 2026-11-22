@@ -103,7 +103,7 @@ export interface Profile {
   full_name: string;
   email: string;
   phone: string | null;
-  preferred_language: 'en' | 'ta';
+  preferred_language: 'en' | 'ta' | 'hi' | 'te';
   role: UserRole;
   created_at: string;
   updated_at: string;

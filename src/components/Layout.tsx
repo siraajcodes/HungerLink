@@ -23,6 +23,8 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { tx } from '../i18n/helpers';
+import { LANGUAGE_OPTIONS } from '../i18n/translations';
+import { ROUTE_ROLES, type AppRouteKey } from '../lib/rbac';
 import type { UserRole } from '../types/database';
 
 const ALL_ROLES: UserRole[] = [
@@ -35,6 +37,7 @@ const ALL_ROLES: UserRole[] = [
 ];
 
 interface NavItem {
+  key: AppRouteKey;
   to: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
@@ -66,72 +69,93 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const role = profile?.role ?? 'FOOD_DONOR';
 
   const rawNavItems: NavItem[] = [
-    { to: '/', label: language === 'ta' ? t.nav.dashboard : 'Home', icon: Home, roles: ALL_ROLES, group: 'primary' },
+    { key: 'dashboard', to: '/', label: t.nav.dashboard, icon: Home, roles: ROUTE_ROLES.dashboard, group: 'primary' },
     {
+      key: 'donations',
       to: '/donations',
-      label: language === 'ta' ? t.nav.donations : 'Donate Food',
+      label: t.nav.donations,
       icon: PackagePlus,
-      roles: ['FOOD_DONOR', 'ADMINISTRATOR'],
+      roles: ROUTE_ROLES.donations,
       group: 'primary',
     },
     {
+      key: 'requests',
       to: '/requests',
-      label: language === 'ta' ? t.nav.requests : 'Request Meals',
+      label: t.nav.requests,
       icon: HandHeart,
-      roles: ['VERIFIED_NGO', 'COMMUNITY_KITCHEN', 'ADMINISTRATOR', 'FIELD_WORKER'],
+      roles: ROUTE_ROLES.requests,
       group: 'primary',
     },
     {
-      to: '/nutriloop',
-      label: language === 'ta' ? t.nav.nutriloop : 'Nutrition (NutriLoop)',
-      icon: Sprout,
-      roles: ALL_ROLES,
-      group: 'primary',
-    },
-    {
-      to: '/routes',
-      label: language === 'ta' ? t.nav.routes : 'Deliveries',
-      icon: Map,
-      roles: ['DELIVERY_PARTNER', 'ADMINISTRATOR', 'VERIFIED_NGO', 'COMMUNITY_KITCHEN', 'FOOD_DONOR'],
-      group: 'primary',
-    },
-    {
-      to: '/mealtrace',
-      label: language === 'ta' ? t.nav.mealtrace : 'Scan QR',
-      icon: QrCode,
-      roles: ALL_ROLES,
-      group: 'primary',
-    },
-    // Secondary / Operational & Admin Tools (kept tidy inside "More tools")
-    {
-      to: '/safety',
-      label: t.nav.safety,
-      icon: ClipboardCheck,
-      roles: ['ADMINISTRATOR', 'FOOD_DONOR', 'VERIFIED_NGO', 'COMMUNITY_KITCHEN'],
-      group: 'more',
-    },
-    {
-      to: '/matching',
-      label: t.nav.matching,
-      icon: GitMerge,
-      roles: ['ADMINISTRATOR', 'FOOD_DONOR', 'VERIFIED_NGO', 'COMMUNITY_KITCHEN'],
-      group: 'more',
-    },
-    {
+      key: 'fieldIntake',
       to: '/field-intake',
       label: t.nav.fieldIntake,
       icon: Smartphone,
-      roles: ['FIELD_WORKER', 'ADMINISTRATOR'],
+      roles: ROUTE_ROLES.fieldIntake,
+      group: role === 'FIELD_WORKER' ? 'primary' : 'more',
+    },
+    {
+      key: 'nutriloop',
+      to: '/nutriloop',
+      label: t.nav.nutriloop,
+      icon: Sprout,
+      roles: ROUTE_ROLES.nutriloop,
+      group: 'primary',
+    },
+    {
+      key: 'routes',
+      to: '/routes',
+      label: t.nav.routes,
+      icon: Map,
+      roles: ROUTE_ROLES.routes,
+      group: 'primary',
+    },
+    {
+      key: 'mealtrace',
+      to: '/mealtrace',
+      label: t.nav.mealtrace,
+      icon: QrCode,
+      roles: ROUTE_ROLES.mealtrace,
+      group: 'primary',
+    },
+    // Secondary / Operational & Admin Tools (strictly filtered by role)
+    {
+      key: 'safety',
+      to: '/safety',
+      label: t.nav.safety,
+      icon: ClipboardCheck,
+      roles: ROUTE_ROLES.safety,
       group: 'more',
     },
-    { to: '/impact', label: t.nav.impact, icon: BarChart3, roles: ALL_ROLES, group: 'more' },
-    { to: '/notifications', label: t.nav.notifications, icon: Bell, roles: ALL_ROLES, badge: unreadCount, group: 'more' },
-    { to: '/onboarding', label: t.nav.onboarding, icon: Building2, roles: ALL_ROLES, group: 'more' },
-    { to: '/admin', label: t.nav.admin, icon: ShieldCheck, roles: ['ADMINISTRATOR'], group: 'more' },
-    { to: '/setup', label: t.nav.setup, icon: Database, roles: ALL_ROLES, group: 'more' },
+    {
+      key: 'matching',
+      to: '/matching',
+      label: t.nav.matching,
+      icon: GitMerge,
+      roles: ROUTE_ROLES.matching,
+      group: 'more',
+    },
+    { key: 'impact', to: '/impact', label: t.nav.impact, icon: BarChart3, roles: ROUTE_ROLES.impact, group: 'more' },
+    { key: 'notifications', to: '/notifications', label: t.nav.notifications, icon: Bell, roles: ROUTE_ROLES.notifications, badge: unreadCount, group: 'more' },
+    { key: 'onboarding', to: '/onboarding', label: t.nav.onboarding, icon: Building2, roles: ROUTE_ROLES.onboarding, group: 'more' },
+    { key: 'admin', to: '/admin', label: t.nav.admin, icon: ShieldCheck, roles: ROUTE_ROLES.admin, group: 'more' },
+    { key: 'setup', to: '/setup', label: t.nav.setup, icon: Database, roles: ROUTE_ROLES.setup, group: 'more' },
   ];
 
   const allNavItems = rawNavItems.filter((item) => item.roles.includes(role));
+
+  const topCta = (() => {
+    if (role === 'VERIFIED_NGO' || role === 'COMMUNITY_KITCHEN') {
+      return { to: '/requests', label: tx(language, 'Request Meals', 'உணவு கோரிக்கை') };
+    }
+    if (role === 'DELIVERY_PARTNER') {
+      return { to: '/routes', label: tx(language, 'Deliveries', 'விநியோகங்கள்') };
+    }
+    if (role === 'FIELD_WORKER') {
+      return { to: '/field-intake', label: t.nav.fieldIntake };
+    }
+    return { to: '/donations', label: tx(language, 'Donate Food', 'உணவு தானம்') };
+  })();
 
   const primaryNav = allNavItems.filter((item) => item.group === 'primary');
   const moreNav = allNavItems.filter((item) => item.group === 'more');
@@ -260,32 +284,32 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           </div>
         )}
 
-        <div className="flex items-center justify-between gap-2">
-          <div className="inline-flex rounded-lg bg-[#0B2723] p-0.5 border border-white/15">
-            <button
-              type="button"
-              onClick={() => setLanguage('en')}
-              className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
-                language === 'en' ? 'bg-[#D7F36B] text-[#123B35]' : 'text-white/75 hover:text-white'
-              }`}
-            >
-              EN
-            </button>
-            <button
-              type="button"
-              onClick={() => setLanguage('ta')}
-              className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
-                language === 'ta' ? 'bg-[#D7F36B] text-[#123B35]' : 'text-white/75 hover:text-white'
-              }`}
-            >
-              தமிழ்
-            </button>
+        <div className="space-y-2">
+          <div
+            role="group"
+            aria-label={tx(language, 'Language selector', 'மொழித் தேர்வு', 'भाषा चुनें', 'భాష ఎంపిక')}
+            className="grid grid-cols-4 gap-0.5 rounded-lg bg-[#0B2723] p-0.5 border border-white/15"
+          >
+            {LANGUAGE_OPTIONS.map((opt) => (
+              <button
+                key={opt.code}
+                type="button"
+                onClick={() => setLanguage(opt.code)}
+                className={`px-1 py-1 text-[11px] font-semibold rounded-md transition-colors truncate ${
+                  language === opt.code
+                    ? 'bg-[#D7F36B] text-[#123B35]'
+                    : 'text-white/75 hover:text-white'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
           </div>
 
           <button
             type="button"
             onClick={() => (isDemoMode ? exitDemoMode() : void signOut())}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white/85 hover:text-white hover:bg-white/10 transition-colors"
+            className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white/85 hover:text-white hover:bg-white/10 transition-colors"
           >
             <LogOut className="w-3.5 h-3.5" />
             <span>{isDemoMode ? tx(language, 'Exit', 'வெளியேறு') : t.auth.signOut}</span>
@@ -359,12 +383,10 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           </div>
 
           <Link
-            to={role === 'VERIFIED_NGO' || role === 'COMMUNITY_KITCHEN' ? '/requests' : '/donations'}
+            to={topCta.to}
             className="min-h-[40px] inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#123B35] text-white text-xs font-semibold hover:bg-[#0B2723] transition-colors whitespace-nowrap shrink-0"
           >
-            {role === 'VERIFIED_NGO' || role === 'COMMUNITY_KITCHEN'
-              ? tx(language, 'Request Meals', 'உணவு கோரிக்கை')
-              : tx(language, 'Donate Food', 'உணவு தானம்')}
+            {topCta.label}
           </Link>
         </header>
 

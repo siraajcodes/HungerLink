@@ -11,6 +11,7 @@ import {
 } from 'recharts';
 import { Download, Info } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { formatOrgName, formatOrgType, tx } from '../i18n/helpers';
 import { buildCsvDocument } from '../lib/matchingEngine';
 
 export const ImpactLedgerPage: React.FC = () => {
@@ -21,6 +22,7 @@ export const ImpactLedgerPage: React.FC = () => {
     routes,
     mealtraceEvents,
     isDemoMode,
+    language,
     t,
   } = useApp();
 
@@ -65,7 +67,6 @@ export const ImpactLedgerPage: React.FC = () => {
 
     const completionRate = allocated > 0 ? Math.round((delivered / allocated) * 1000) / 10 : 0;
 
-    // Calculate average pickup time from MealTrace SUBMITTED -> PICKUP_SCANNED events
     const pickupDurations: number[] = [];
     for (const batch of filteredBatches) {
       const pickupEv = mealtraceEvents.find(
@@ -86,7 +87,6 @@ export const ImpactLedgerPage: React.FC = () => {
         ? Math.round(pickupDurations.reduce((a, b) => a + b, 0) / pickupDurations.length)
         : null;
 
-    // Repeat donors (>= 2 non-cancelled batches)
     const donorCounts = new Map<string, number>();
     for (const b of filteredBatches) {
       if (b.status !== 'CANCELLED') {
@@ -112,11 +112,11 @@ export const ImpactLedgerPage: React.FC = () => {
   }, [filteredBatches, filteredImpact, mealtraceEvents, routes]);
 
   const chartData = [
-    { stage: 'Offered', portions: metrics.offered, color: '#123B35' },
-    { stage: 'Allocated', portions: metrics.allocated, color: '#1E544C' },
-    { stage: 'Delivered', portions: metrics.delivered, color: '#6FA32C' },
-    { stage: 'Unallocated', portions: metrics.unallocated, color: '#64748B' },
-    { stage: 'Rejected', portions: metrics.rejected, color: '#FF795C' },
+    { stage: tx(language, 'Offered', 'வழங்கப்பட்டது'), portions: metrics.offered, color: '#123B35' },
+    { stage: tx(language, 'Allocated', 'ஒதுக்கப்பட்டது'), portions: metrics.allocated, color: '#1E544C' },
+    { stage: tx(language, 'Delivered', 'சேர்க்கப்பட்டது'), portions: metrics.delivered, color: '#6FA32C' },
+    { stage: tx(language, 'Unallocated', 'மீதம்'), portions: metrics.unallocated, color: '#64748B' },
+    { stage: tx(language, 'Rejected', 'நிராகரிப்பு'), portions: metrics.rejected, color: '#FF795C' },
   ];
 
   const handleExportCsv = () => {
@@ -151,7 +151,11 @@ export const ImpactLedgerPage: React.FC = () => {
         <div>
           <h2 className="text-2xl font-extrabold font-display text-[#123B35]">{t.impact.title}</h2>
           <p className="mt-1 text-sm text-[#64748B]">
-            Verified surplus food rescue analytics computed strictly from confirmed records.
+            {tx(
+              language,
+              'Verified surplus food rescue analytics computed strictly from confirmed records.',
+              'உறுதிப்படுத்தப்பட்ட பதிவுகளிலிருந்து மட்டுமே கணக்கிடப்பட்ட உணவு மீட்புத் தாக்க அறிக்கை.'
+            )}
           </p>
         </div>
 
@@ -175,7 +179,7 @@ export const ImpactLedgerPage: React.FC = () => {
       <div className="rounded-2xl bg-white border border-[#123B35]/10 p-5 grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
         <div className="md:col-span-2">
           <label htmlFor="il-org" className="block text-xs font-semibold text-[#123B35] mb-1">
-            Filter by Organisation
+            {tx(language, 'Filter by Organisation', 'நிறுவனம் வாரியாக வடிகட்டு')}
           </label>
           <select
             id="il-org"
@@ -183,10 +187,12 @@ export const ImpactLedgerPage: React.FC = () => {
             onChange={(e) => setOrgFilter(e.target.value)}
             className="w-full rounded-xl border border-[#123B35]/20 bg-[#FFF9EF]/40 px-3 py-2 text-xs"
           >
-            <option value="ALL">All Organisations ({organisations.length})</option>
+            <option value="ALL">
+              {tx(language, 'All Organisations', 'அனைத்து நிறுவனங்கள்')} ({organisations.length})
+            </option>
             {organisations.map((o) => (
               <option key={o.id} value={o.id}>
-                {o.name} ({o.org_type})
+                {formatOrgName(o.name, language)} ({formatOrgType(o.org_type, language)})
               </option>
             ))}
           </select>
@@ -194,7 +200,7 @@ export const ImpactLedgerPage: React.FC = () => {
 
         <div>
           <label htmlFor="il-from" className="block text-xs font-semibold text-[#123B35] mb-1">
-            From Date
+            {tx(language, 'From Date', 'தொடக்கத் தேதி')}
           </label>
           <input
             id="il-from"
@@ -207,7 +213,7 @@ export const ImpactLedgerPage: React.FC = () => {
 
         <div>
           <label htmlFor="il-to" className="block text-xs font-semibold text-[#123B35] mb-1">
-            To Date
+            {tx(language, 'To Date', 'இறுதித் தேதி')}
           </label>
           <input
             id="il-to"
@@ -249,7 +255,9 @@ export const ImpactLedgerPage: React.FC = () => {
         <div className="rounded-2xl bg-white border border-[#123B35]/10 p-4">
           <div className="text-xs text-[#64748B]">{t.impact.avgPickupTime}</div>
           <div className="mt-1.5 text-xl font-bold font-mono tabular-nums text-[#123B35]">
-            {metrics.avgPickupMinutes !== null ? `${metrics.avgPickupMinutes} min` : 'No scans'}
+            {metrics.avgPickupMinutes !== null
+              ? `${metrics.avgPickupMinutes} ${tx(language, 'min', 'நிமி')}`
+              : tx(language, 'No scans', 'ஸ்கேன் இல்லை')}
           </div>
         </div>
         <div className="rounded-2xl bg-white border border-[#123B35]/10 p-4">
@@ -275,10 +283,14 @@ export const ImpactLedgerPage: React.FC = () => {
       {/* Portion Funnel Chart */}
       <section className="rounded-2xl bg-white border border-[#123B35]/10 p-6">
         <h3 className="text-base font-bold font-display text-[#123B35]">
-          Surplus Portion Accounting Breakdown
+          {tx(language, 'Surplus Portion Breakdown', 'உபரி உணவுப் பங்கு விவரம்')}
         </h3>
         <p className="mt-0.5 text-xs text-[#64748B]">
-          Comparison of offered, allocated, confirmed delivered, unallocated, and safety-rejected portions.
+          {tx(
+            language,
+            'Comparison of offered, allocated, confirmed delivered, unallocated, and safety-rejected portions.',
+            'வழங்கப்பட்ட, ஒதுக்கப்பட்ட, உறுதிப்படுத்தப்பட்ட, மீதமுள்ள மற்றும் நிராகரிக்கப்பட்ட பங்குகளின் ஒப்பீடு.'
+          )}
         </p>
 
         <div className="mt-6 h-72 w-full">
@@ -288,6 +300,7 @@ export const ImpactLedgerPage: React.FC = () => {
               <XAxis dataKey="stage" tick={{ fontSize: 12, fill: '#123B35' }} />
               <YAxis tick={{ fontSize: 12, fill: '#64748B' }} allowDecimals={false} />
               <Tooltip
+                formatter={(val: unknown) => [String(val), t.common.portions]}
                 contentStyle={{
                   backgroundColor: '#FFFFFF',
                   border: '1px solid rgba(18,59,53,0.15)',
@@ -309,24 +322,27 @@ export const ImpactLedgerPage: React.FC = () => {
       <section className="rounded-2xl bg-white border border-[#123B35]/10 overflow-hidden">
         <div className="px-6 py-4 border-b border-[#123B35]/10">
           <h3 className="text-base font-bold font-display text-[#123B35]">
-            Confirmed Impact Records ({filteredImpact.length})
+            {tx(language, 'Confirmed Impact Records', 'உறுதிப்படுத்தப்பட்ட தாக்கப் பதிவுகள்')} ({filteredImpact.length})
           </h3>
         </div>
         {filteredImpact.length === 0 ? (
           <div className="p-8 text-center text-sm text-[#64748B]">
-            No confirmed deliveries recorded yet. Complete a MealTrace handover confirmation to
-            record verified impact.
+            {tx(
+              language,
+              'No confirmed deliveries recorded yet. Complete a QR handover confirmation to record verified impact.',
+              'இதுவரை உறுதிப்படுத்தப்பட்ட விநியோகங்கள் எதுவும் பதிவாகவில்லை.'
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-[#123B35]/10 bg-[#FFF9EF]/60 text-xs font-semibold text-[#64748B]">
-                  <th className="py-3 px-6">Batch</th>
-                  <th className="py-3 px-4">Receiving Organisation</th>
-                  <th className="py-3 px-4">Distribution Area</th>
-                  <th className="py-3 px-4 text-right">Confirmed Portions</th>
-                  <th className="py-3 px-6 text-right">Confirmed At</th>
+                  <th className="py-3 px-6">{tx(language, 'Batch', 'தொகுதி')}</th>
+                  <th className="py-3 px-4">{tx(language, 'Receiving Organisation', 'பெறும் நிறுவனம்')}</th>
+                  <th className="py-3 px-4">{tx(language, 'Distribution Area', 'விநியோகப் பகுதி')}</th>
+                  <th className="py-3 px-4 text-right">{tx(language, 'Confirmed Portions', 'உறுதிப்படுத்தப்பட்ட பங்குகள்')}</th>
+                  <th className="py-3 px-6 text-right">{tx(language, 'Confirmed At', 'உறுதிப்படுத்திய நேரம்')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#123B35]/8 text-sm">
@@ -339,7 +355,7 @@ export const ImpactLedgerPage: React.FC = () => {
                         {batch?.batch_code ?? ir.donation_batch_id.slice(0, 8)}
                       </td>
                       <td className="py-3.5 px-4 font-medium text-[#123B35]">
-                        {org?.name ?? ir.organisation_id}
+                        {formatOrgName(org?.name, language) || ir.organisation_id}
                       </td>
                       <td className="py-3.5 px-4 text-xs text-[#64748B]">{ir.distribution_area}</td>
                       <td className="py-3.5 px-4 text-right font-mono tabular-nums font-bold text-[#123B35]">

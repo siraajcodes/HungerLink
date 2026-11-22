@@ -1,6 +1,17 @@
 import React, { useMemo, useState } from 'react';
 import { Check, HandHeart, Plus, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import {
+  formatAllocationStatus,
+  formatDietary,
+  formatDynamicDemoText,
+  formatFoodName,
+  formatIntakeChannel,
+  formatOrgName,
+  formatRequestStatus,
+  tx,
+} from '../i18n/helpers';
+import { canPerformAction } from '../lib/rbac';
 import type { DietaryPreference } from '../types/database';
 
 function toLocalDateTimeInput(offsetMinutes: number): string {
@@ -22,7 +33,13 @@ export const RequestsPage: React.FC = () => {
     createMealRequest,
     respondToAllocation,
     recordMealTraceScan,
+    language,
+    t,
   } = useApp();
+
+  const canCreateRequest = canPerformAction(profile?.role, 'request:create');
+  const canRespondAlloc = canPerformAction(profile?.role, 'allocation:respond');
+  const canConfirmPortions = canPerformAction(profile?.role, 'mealtrace:confirm_portions');
 
   const verifiedRecipients = organisations.filter(
     (o) =>
@@ -72,7 +89,13 @@ export const RequestsPage: React.FC = () => {
     setErrorMsg(null);
     const chosenOrg = orgId || defaultOrgId;
     if (!chosenOrg) {
-      setErrorMsg('Select a verified NGO or Community Kitchen.');
+      setErrorMsg(
+        tx(
+          language,
+          'Select a verified NGO or Community Kitchen.',
+          'சரிபார்க்கப்பட்ட தன்னார்வ நிறுவனம் அல்லது சமூக சமையலறையைத் தேர்ந்தெடுக்கவும்.'
+        )
+      );
       return;
     }
     const res = await createMealRequest({
@@ -99,7 +122,10 @@ export const RequestsPage: React.FC = () => {
       event_type: 'PORTIONS_CONFIRMED',
       recorded_temp: receivedTemp ? Number(receivedTemp) : null,
       confirmed_portions: Number(confirmedPortions),
-      distribution_area: distributionArea.trim() || activeOrganisation?.address || 'Verified Community Site',
+      distribution_area:
+        distributionArea.trim() ||
+        activeOrganisation?.address ||
+        tx(language, 'Verified Community Site', 'சரிபார்க்கப்பட்ட சமூக மையம்'),
       notes: 'Receiving organisation confirmed actual portions upon physical handover',
     });
     if (res.error) setErrorMsg(res.error);
@@ -111,21 +137,30 @@ export const RequestsPage: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
           <h2 className="text-2xl font-extrabold font-display text-[#123B35]">
-            Meal Requests &amp; Receiving Confirmations
+            {tx(language, 'Meal Requests & Receiving Confirmations', 'உணவு கோரிக்கைகள் & பெறுதல் உறுதிப்படுத்தல்')}
           </h2>
           <p className="mt-1 text-sm text-[#64748B]">
-            Verified NGOs and Community Kitchens log meal demand, accept or decline proposed
-            allocations, and confirm actual received portions into ImpactLedger.
+            {tx(
+              language,
+              'Log how many meals your shelter needs—available safe surplus is matched and assigned to a driver automatically.',
+              'உங்கள் காப்பகத்திற்குத் தேவையான உணவுகளைப் பதிவு செய்யுங்கள்—பாதுகாப்பான உபரி உணவு தானாகப் பொருத்தப்பட்டு ஓட்டுநருக்கு ஒதுக்கப்படும்.',
+              'अपने आश्रय के लिए ज़रूरी भोजन दर्ज करें—उपलब्ध सुरक्षित अधिशेष भोजन अपने आप मिलान होकर ड्राइवर को सौंप दिया जाएगा।',
+              'మీ ఆశ్రయానికి అవసరమైన భోజనాలను నమోదు చేయండి—అందుబాటులో ఉన్న సురక్షిత మిగులు ఆహారం స్వయంచాలకంగా సరిపోల్చబడి డ్రైవర్‌కు కేటాయించబడుతుంది.'
+            )}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowForm((v) => !v)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#123B35] text-white text-xs font-semibold hover:bg-[#0B2723]"
-        >
-          <Plus className="w-4 h-4" />
-          {showForm ? 'Close Form' : 'New Meal Request'}
-        </button>
+        {canCreateRequest && (
+          <button
+            type="button"
+            onClick={() => setShowForm((v) => !v)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#123B35] text-white text-xs font-semibold hover:bg-[#0B2723]"
+          >
+            <Plus className="w-4 h-4" />
+            {showForm
+              ? tx(language, 'Close Form', 'படிவத்தை மூடு')
+              : tx(language, 'New Meal Request', 'புதிய உணவு கோரிக்கை')}
+          </button>
+        )}
       </div>
 
       {errorMsg && (
@@ -134,16 +169,18 @@ export const RequestsPage: React.FC = () => {
         </div>
       )}
 
-      {showForm && (
+      {showForm && canCreateRequest && (
         <form
           onSubmit={handleCreate}
           className="rounded-2xl bg-white border border-[#123B35]/15 p-6 space-y-5"
         >
-          <h3 className="text-base font-bold font-display text-[#123B35]">Submit Meal Request</h3>
+          <h3 className="text-base font-bold font-display text-[#123B35]">
+            {tx(language, 'Submit Meal Request', 'உணவு கோரிக்கையைச் சமர்ப்பி')}
+          </h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label htmlFor="req-org" className="block text-xs font-semibold text-[#123B35] mb-1">
-                Verified Recipient Organisation *
+                {tx(language, 'Verified Recipient Organisation *', 'சரிபார்க்கப்பட்ட பெறும் நிறுவனம் *')}
               </label>
               <select
                 id="req-org"
@@ -154,7 +191,7 @@ export const RequestsPage: React.FC = () => {
               >
                 {verifiedRecipients.map((o) => (
                   <option key={o.id} value={o.id}>
-                    {o.name} (Cap: {o.daily_capacity})
+                    {formatOrgName(o.name, language)} ({tx(language, 'Cap', 'திறன்')}: {o.daily_capacity})
                   </option>
                 ))}
               </select>
@@ -162,7 +199,7 @@ export const RequestsPage: React.FC = () => {
 
             <div>
               <label htmlFor="req-portions" className="block text-xs font-semibold text-[#123B35] mb-1">
-                Portions Needed *
+                {tx(language, 'Portions Needed *', 'தேவையான பங்குகள் *')}
               </label>
               <input
                 id="req-portions"
@@ -178,7 +215,7 @@ export const RequestsPage: React.FC = () => {
 
             <div>
               <label htmlFor="req-diet" className="block text-xs font-semibold text-[#123B35] mb-1">
-                Dietary Requirement *
+                {tx(language, 'Dietary Requirement *', 'உணவு விருப்பம் *')}
               </label>
               <select
                 id="req-diet"
@@ -186,19 +223,19 @@ export const RequestsPage: React.FC = () => {
                 onChange={(e) => setDietaryPref(e.target.value as DietaryPreference)}
                 className="w-full rounded-xl border border-[#123B35]/20 bg-[#FFF9EF]/40 px-3 py-2 text-sm"
               >
-                <option value="VEGETARIAN">Vegetarian</option>
-                <option value="ANY">Any</option>
-                <option value="VEGAN">Vegan</option>
-                <option value="JAIN">Jain</option>
-                <option value="HALAL">Halal</option>
-                <option value="EGGETARIAN">Eggetarian</option>
-                <option value="NON_VEGETARIAN">Non-Vegetarian</option>
+                {(['VEGETARIAN', 'ANY', 'VEGAN', 'JAIN', 'HALAL', 'EGGETARIAN', 'NON_VEGETARIAN'] as DietaryPreference[]).map(
+                  (d) => (
+                    <option key={d} value={d}>
+                      {formatDietary(d, language)}
+                    </option>
+                  )
+                )}
               </select>
             </div>
 
             <div>
               <label htmlFor="req-urgency" className="block text-xs font-semibold text-[#123B35] mb-1">
-                Urgency Score (0.10 – 1.00) *
+                {tx(language, 'Urgency Score (0.10 – 1.00) *', 'அவசர அளவு (0.10 – 1.00) *')}
               </label>
               <input
                 id="req-urgency"
@@ -215,7 +252,7 @@ export const RequestsPage: React.FC = () => {
 
             <div>
               <label htmlFor="req-by" className="block text-xs font-semibold text-[#123B35] mb-1">
-                Required By *
+                {tx(language, 'Required By *', 'தேவைப்படும் நேரம் *')}
               </label>
               <input
                 id="req-by"
@@ -229,14 +266,14 @@ export const RequestsPage: React.FC = () => {
 
             <div>
               <label htmlFor="req-notes" className="block text-xs font-semibold text-[#123B35] mb-1">
-                Service Context / Notes
+                {tx(language, 'Service Context / Notes', 'குறிப்புகள்')}
               </label>
               <input
                 id="req-notes"
                 type="text"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="e.g. Evening shelter dinner service"
+                placeholder={tx(language, 'e.g. Evening shelter dinner service', 'எ.கா. மாலை காப்பக இரவு உணவு')}
                 className="w-full rounded-xl border border-[#123B35]/20 bg-[#FFF9EF]/40 px-3 py-2 text-sm"
               />
             </div>
@@ -247,7 +284,7 @@ export const RequestsPage: React.FC = () => {
               type="submit"
               className="px-5 py-2.5 rounded-xl bg-[#123B35] text-white text-xs font-semibold hover:bg-[#0B2723]"
             >
-              Submit Request
+              {tx(language, 'Submit Request', 'கோரிக்கையைச் சமர்ப்பி')}
             </button>
           </div>
         </form>
@@ -257,18 +294,24 @@ export const RequestsPage: React.FC = () => {
       <section className="rounded-2xl bg-white border border-[#123B35]/10 overflow-hidden">
         <div className="px-6 py-4 border-b border-[#123B35]/10">
           <h3 className="text-base font-bold font-display text-[#123B35]">
-            Allocated Donations &amp; Handover Confirmation
+            {tx(language, 'Allocated Donations & Handover Confirmation', 'ஒதுக்கப்பட்ட உணவுகள் & ஒப்படைப்பு உறுதிப்படுத்தல்')}
           </h3>
           <p className="text-xs text-[#64748B]">
-            Accept or decline coordinator-approved matches, and confirm actual delivered portions
-            when food arrives.
+            {tx(
+              language,
+              'Accept or decline coordinator-approved matches, and confirm actual delivered portions when food arrives.',
+              'அங்கீகரிக்கப்பட்ட உணவு ஒதுக்கீடுகளை ஏற்கவும் அல்லது மறுக்கவும்; உணவு வந்தவுடன் பெறப்பட்ட அளவை உறுதிப்படுத்தவும்.'
+            )}
           </p>
         </div>
 
         {visibleAllocations.length === 0 ? (
           <div className="p-8 text-center text-sm text-[#64748B]">
-            No surplus allocations have been proposed for these requests yet. Run the Smart Matching
-            Engine to match open requests.
+            {tx(
+              language,
+              'No surplus allocations have been proposed for these requests yet.',
+              'இந்தக் கோரிக்கைகளுக்கு இதுவரை உணவு ஒதுக்கீடுகள் எதுவும் முன்மொழியப்படவில்லை.'
+            )}
           </div>
         ) : (
           <div className="divide-y divide-[#123B35]/8">
@@ -276,26 +319,34 @@ export const RequestsPage: React.FC = () => {
               const batch = batches.find((b) => b.id === alloc.donation_batch_id);
               const req = requests.find((r) => r.id === alloc.meal_request_id);
               const recipientOrg = organisations.find((o) => o.id === req?.org_id);
-              const canRespond = alloc.status === 'PROPOSED' || alloc.status === 'APPROVED';
+              const canRespond = canRespondAlloc && (alloc.status === 'PROPOSED' || alloc.status === 'APPROVED');
               const canConfirmDelivery =
-                alloc.status === 'DISPATCHED' ||
-                alloc.status === 'PICKED_UP' ||
-                alloc.status === 'ACCEPTED' ||
-                alloc.status === 'APPROVED';
+                canConfirmPortions &&
+                (alloc.status === 'DISPATCHED' ||
+                  alloc.status === 'PICKED_UP' ||
+                  alloc.status === 'ACCEPTED' ||
+                  alloc.status === 'APPROVED');
 
               return (
                 <div key={alloc.id} className="p-6 space-y-4">
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
                       <div className="text-sm font-bold text-[#123B35]">
-                        {batch?.food_item ?? 'Surplus Batch'} ·{' '}
-                        <span className="font-mono">{alloc.allocated_portions} portions</span>
+                        {batch ? formatFoodName(batch.food_item, language) : tx(language, 'Surplus Batch', 'உபரி உணவுத் தொகுதி')} ·{' '}
+                        <span className="font-mono">
+                          {alloc.allocated_portions} {t.common.portions}
+                        </span>
                       </div>
                       <div className="mt-1 text-xs text-[#64748B]">
-                        Recipient: {recipientOrg?.name ?? 'Verified Org'} · Batch{' '}
-                        <span className="font-mono">{batch?.batch_code}</span> · Match score{' '}
-                        <span className="font-mono">{(alloc.match_score * 100).toFixed(1)}%</span> · Status:{' '}
-                        <span className="font-semibold text-[#123B35]">{alloc.status}</span>
+                        {tx(language, 'Recipient:', 'பெறுநர்:')}{' '}
+                        {formatOrgName(recipientOrg?.name, language) || tx(language, 'Verified Org', 'சரிபார்க்கப்பட்ட நிறுவனம்')} ·{' '}
+                        {tx(language, 'Batch', 'தொகுதி')} <span className="font-mono">{batch?.batch_code}</span> ·{' '}
+                        {tx(language, 'Match', 'பொருத்தம்')}{' '}
+                        <span className="font-mono">{(alloc.match_score * 100).toFixed(1)}%</span> ·{' '}
+                        {tx(language, 'Status:', 'நிலை:')}{' '}
+                        <span className="font-semibold text-[#123B35]">
+                          {formatAllocationStatus(alloc.status, language)}
+                        </span>
                       </div>
                     </div>
 
@@ -308,7 +359,7 @@ export const RequestsPage: React.FC = () => {
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#123B35] text-white text-xs font-semibold hover:bg-[#0B2723]"
                           >
                             <Check className="w-3.5 h-3.5" />
-                            Accept
+                            {tx(language, 'Accept', 'ஏற்றுக்கொள்')}
                           </button>
                           <button
                             type="button"
@@ -316,7 +367,7 @@ export const RequestsPage: React.FC = () => {
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#FF795C] text-[#FF795C] text-xs font-semibold hover:bg-[#FF795C]/10"
                           >
                             <X className="w-3.5 h-3.5" />
-                            Decline
+                            {tx(language, 'Decline', 'மறுக்கவும்')}
                           </button>
                         </>
                       )}
@@ -331,7 +382,7 @@ export const RequestsPage: React.FC = () => {
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#D7F36B] text-[#123B35] text-xs font-bold hover:bg-[#C8E655]"
                         >
                           <HandHeart className="w-3.5 h-3.5" />
-                          Confirm Received Portions
+                          {tx(language, 'Confirm Received Portions', 'பெறப்பட்ட பங்குகளை உறுதிப்படுத்து')}
                         </button>
                       )}
                     </div>
@@ -344,7 +395,7 @@ export const RequestsPage: React.FC = () => {
                     >
                       <div>
                         <label className="block text-xs font-semibold text-[#123B35] mb-1">
-                          Actual Portions Received *
+                          {tx(language, 'Actual Portions Received *', 'உண்மையில் பெறப்பட்ட பங்குகள் *')}
                         </label>
                         <input
                           type="number"
@@ -358,7 +409,7 @@ export const RequestsPage: React.FC = () => {
                       </div>
                       <div>
                         <label className="block text-xs font-semibold text-[#123B35] mb-1">
-                          Handover Temp (°C)
+                          {tx(language, 'Handover Temp (°C)', 'ஒப்படைப்பு வெப்பநிலை (°C)')}
                         </label>
                         <input
                           type="number"
@@ -370,7 +421,7 @@ export const RequestsPage: React.FC = () => {
                       </div>
                       <div>
                         <label className="block text-xs font-semibold text-[#123B35] mb-1">
-                          Distribution Area *
+                          {tx(language, 'Distribution Area *', 'விநியோகப் பகுதி *')}
                         </label>
                         <input
                           type="text"
@@ -385,14 +436,14 @@ export const RequestsPage: React.FC = () => {
                           type="submit"
                           className="flex-1 px-3 py-2 rounded-lg bg-[#123B35] text-white text-xs font-semibold"
                         >
-                          Confirm Delivery
+                          {tx(language, 'Confirm Delivery', 'உறுதிப்படுத்து')}
                         </button>
                         <button
                           type="button"
                           onClick={() => setConfirmingAllocId(null)}
                           className="px-2.5 py-2 rounded-lg border border-[#123B35]/20 text-xs font-semibold"
                         >
-                          Cancel
+                          {t.common.cancel}
                         </button>
                       </div>
                     </form>
@@ -407,17 +458,19 @@ export const RequestsPage: React.FC = () => {
       {/* Meal Requests Table */}
       <section className="rounded-2xl bg-white border border-[#123B35]/10 overflow-hidden">
         <div className="px-6 py-4 border-b border-[#123B35]/10">
-          <h3 className="text-base font-bold font-display text-[#123B35]">Meal Request Ledger</h3>
+          <h3 className="text-base font-bold font-display text-[#123B35]">
+            {tx(language, 'Meal Request Ledger', 'உணவு கோரிக்கை பட்டியல்')}
+          </h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-[#123B35]/10 bg-[#FFF9EF]/60 text-xs font-semibold text-[#64748B]">
-                <th className="py-3 px-6">Organisation</th>
-                <th className="py-3 px-4">Dietary &amp; Channel</th>
-                <th className="py-3 px-4 text-right">Fulfilled / Needed</th>
-                <th className="py-3 px-4 text-right">Urgency</th>
-                <th className="py-3 px-6">Status</th>
+                <th className="py-3 px-6">{tx(language, 'Organisation', 'நிறுவனம்')}</th>
+                <th className="py-3 px-4">{tx(language, 'Dietary & Channel', 'உணவு & வழி')}</th>
+                <th className="py-3 px-4 text-right">{tx(language, 'Fulfilled / Needed', 'கிடைத்தது / தேவை')}</th>
+                <th className="py-3 px-4 text-right">{tx(language, 'Urgency', 'அவசரம்')}</th>
+                <th className="py-3 px-6">{tx(language, 'Status', 'நிலை')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#123B35]/8 text-sm">
@@ -426,11 +479,17 @@ export const RequestsPage: React.FC = () => {
                 return (
                   <tr key={req.id} className="hover:bg-[#FFF9EF]/40">
                     <td className="py-3.5 px-6">
-                      <div className="font-semibold text-[#123B35]">{org?.name ?? 'Verified Org'}</div>
-                      {req.notes && <div className="text-xs text-[#64748B]">{req.notes}</div>}
+                      <div className="font-semibold text-[#123B35]">
+                        {formatOrgName(org?.name, language) || tx(language, 'Verified Org', 'சரிபார்க்கப்பட்ட நிறுவனம்')}
+                      </div>
+                      {req.notes && (
+                        <div className="text-xs text-[#64748B]">
+                          {formatDynamicDemoText(req.notes, language)}
+                        </div>
+                      )}
                     </td>
                     <td className="py-3.5 px-4 text-xs text-[#64748B]">
-                      {req.dietary_pref} · {req.intake_channel.replace(/_/g, ' ')}
+                      {formatDietary(req.dietary_pref, language)} · {formatIntakeChannel(req.intake_channel, language)}
                     </td>
                     <td className="py-3.5 px-4 text-right font-mono tabular-nums text-xs font-semibold text-[#123B35]">
                       {req.portions_fulfilled} / {req.portions_needed}
@@ -439,7 +498,7 @@ export const RequestsPage: React.FC = () => {
                       {(req.urgency_score * 100).toFixed(0)}%
                     </td>
                     <td className="py-3.5 px-6 text-xs font-semibold text-[#123B35]">
-                      {req.status.replace(/_/g, ' ')}
+                      {formatRequestStatus(req.status, language)}
                     </td>
                   </tr>
                 );

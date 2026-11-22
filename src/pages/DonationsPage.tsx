@@ -32,6 +32,7 @@ export const DonationsPage: React.FC = () => {
     organisations,
     batches,
     allocations,
+    routes,
     foodCatalog,
     targetedRequests,
     createDonationBatch,
@@ -583,8 +584,10 @@ export const DonationsPage: React.FC = () => {
             <p className="text-xs text-[#64748B]">
               {tx(
                 language,
-                'Submitted batches wait for an authorised inspector to record a physical safety check.',
-                'சமர்ப்பிக்கப்பட்ட உணவுகள் அங்கீகரிக்கப்பட்ட ஆய்வாளரின் நேரடி பாதுகாப்பு ஆய்வுக்காகக் காத்திருக்கும்.'
+                'Automatic 1-step dispatch: safety check, shelter matching, and delivery driver assignment run immediately on submit.',
+                'ஒரே படியில் தானியங்கி அனுப்புதல்: பாதுகாப்பு சோதனை, காப்பகப் பொருத்தம் மற்றும் ஓட்டுநர் ஒதுக்கீடு உடனடியாக நடக்கும்.',
+                'स्वचालित 1-चरणीय डिस्पैच: सबमिट करते ही सुरक्षा जाँच, आश्रय मिलान और ड्राइवर असाइनमेंट तुरंत हो जाता है।',
+                'ఆటోమేటిక్ 1-స్టెప్ డిస్పాచ్: సమర్పించిన వెంటనే భద్రతా తనిఖీ, ఆశ్రయ సరిపోలిక మరియు డ్రైవర్ కేటాయింపు జరుగుతుంది.'
               )}
             </p>
             <button
@@ -594,7 +597,13 @@ export const DonationsPage: React.FC = () => {
             >
               {submitting
                 ? tx(language, 'Submitting...', 'சமர்ப்பிக்கப்படுகிறது...')
-                : tx(language, 'Submit Batch', 'தொகுதியைச் சமர்ப்பி')}
+                : tx(
+                    language,
+                    'Share & Auto-Dispatch',
+                    'பகிர்ந்து தானாக அனுப்பு',
+                    'साझा करें और ऑटो-डिस्पैच करें',
+                    'పంచుకొని ఆటో-డిస్పాచ్ చేయండి'
+                  )}
             </button>
           </div>
         </form>
@@ -612,7 +621,7 @@ export const DonationsPage: React.FC = () => {
         <div className="flex flex-wrap items-center gap-1 p-1 rounded-xl bg-white border border-[#123B35]/10">
           {[
             { id: 'ALL', label: tx(language, 'All', 'அனைத்தும்') },
-            { id: 'PENDING_INSPECTION', label: tx(language, 'Waiting Check', 'ஆய்வு நிலுவை') },
+            { id: 'DISPATCHED', label: tx(language, 'Dispatched', 'அனுப்பப்பட்டது', 'डिस्पैच किया गया', 'పంపబడింది') },
             { id: 'INSPECTION_PASSED', label: tx(language, 'Ready', 'தயார்') },
             { id: 'DELIVERED', label: tx(language, 'Delivered', 'வழங்கப்பட்டது') },
           ].map((st) => (
@@ -701,6 +710,9 @@ export const DonationsPage: React.FC = () => {
               <tbody className="divide-y divide-[#123B35]/8 text-sm">
                 {visibleBatches.map((batch) => {
                   const batchAllocs = allocations.filter((a) => a.donation_batch_id === batch.id);
+                  const assignedRoute = routes.find((r) =>
+                    r.stops?.some((s) => s.batch_code === batch.batch_code)
+                  );
                   const canEdit =
                     batch.portions_allocated === 0 &&
                     ['SUBMITTED', 'PENDING_INSPECTION'].includes(batch.status);
@@ -731,6 +743,13 @@ export const DonationsPage: React.FC = () => {
                               language,
                               `Split across ${batchAllocs.length} allocation(s)`,
                               `${batchAllocs.length} ஒதுக்கீடு(களாக) பிரிக்கப்பட்டது`
+                            )}
+                            {assignedRoute?.delivery_partner_name && (
+                              <span className="text-[#64748B]">
+                                {' · '}
+                                {tx(language, 'Driver:', 'ஓட்டுநர்:', 'ड्राइवर:', 'డ్రైవర్:')}{' '}
+                                {assignedRoute.delivery_partner_name}
+                              </span>
                             )}
                           </div>
                         )}

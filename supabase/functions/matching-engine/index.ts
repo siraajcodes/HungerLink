@@ -34,7 +34,7 @@ Deno.serve(async (req: Request) => {
   const allowedOrigin = Deno.env.get("ALLOWED_ORIGIN") ?? "";
   const origin = req.headers.get("Origin") ?? "";
   const corsHeaders = {
-    "Access-Control-Allow-Origin": allowedOrigin && origin === allowedOrigin ? origin : allowedOrigin || "https://hungerlink.app",
+    "Access-Control-Allow-Origin": allowedOrigin && origin === allowedOrigin ? origin : allowedOrigin || "https://hungerlink.vercel.app",
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
   };

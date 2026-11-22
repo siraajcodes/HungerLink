@@ -99,7 +99,7 @@ CREATE INDEX IF NOT EXISTS idx_org_members_org ON public.organisation_members(or
 CREATE TABLE IF NOT EXISTS public.donation_batches (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   batch_code TEXT NOT NULL UNIQUE,
-  qr_token TEXT UNIQUE DEFAULT encode(gen_random_bytes(24), 'hex'),
+  qr_token TEXT UNIQUE DEFAULT encode(extensions.gen_random_bytes(24), 'hex'),
   donor_id UUID NOT NULL REFERENCES public.organisations(id) ON DELETE RESTRICT,
   created_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   food_item TEXT NOT NULL,

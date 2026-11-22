@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, HandHeart, PackagePlus, QrCode, ShieldAlert, Sprout } from 'lucide-react';
+import { ArrowRight, HandHeart, PackagePlus, QrCode, ShieldAlert, Sprout, Zap } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import {
   formatBatchStatus,
@@ -122,6 +122,29 @@ export const DashboardPage: React.FC = () => {
         </div>
       )}
 
+      {/* Calm Automatic Workflow Info Strip */}
+      <div className="rounded-2xl bg-white border border-[#123B35]/12 px-5 py-3.5 flex items-start gap-3">
+        <Zap className="w-4 h-4 text-[#123B35] shrink-0 mt-0.5" />
+        <p className="text-xs text-[#64748B] leading-relaxed">
+          <strong className="text-[#123B35]">
+            {tx(
+              language,
+              'Automatic Rescue Workflow Active:',
+              'தானியங்கி உணவு மீட்பு இயங்குகிறது:',
+              'स्वचालित रेस्क्यू वर्कफ़्लो सक्रिय:',
+              'ఆటోమేటిక్ రెస్క్యూ వర్క్‌ఫ్లో యాక్టివ్:'
+            )}
+          </strong>{' '}
+          {tx(
+            language,
+            'Sharing food or submitting a shelter request automatically runs food-safety checks, shelter matching, and delivery driver assignment.',
+            'உணவைப் பகிரும்போது அல்லது கோரிக்கை அனுப்பும்போது உணவுப் பாதுகாப்பு சோதனை, காப்பகப் பொருத்தம் மற்றும் ஓட்டுநர் ஒதுக்கீடு தானாகவே நடக்கும்.',
+            'भोजन साझा करने या आश्रय अनुरोध भेजने पर खाद्य सुरक्षा जाँच, आश्रय मिलान और डिलीवरी ड्राइवर असाइनमेंट अपने आप हो जाता है।',
+            'ఆహారాన్ని పంచుకున్నప్పుడు లేదా ఆశ్రయ అభ్యర్థన పంపినప్పుడు భద్రతా తనిఖీ, ఆశ్రయ సరిపోలిక మరియు డ్రైవర్ కేటాయింపు స్వయంచాలకంగా జరుగుతాయి.'
+          )}
+        </p>
+      </div>
+
       {/* 3 Simple Numbers (Airy & Scannable) */}
       <section aria-label={tx(language, "Today's summary", 'இன்றைய சுருக்கம்')} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="rounded-2xl bg-white border border-[#123B35]/10 p-6">
@@ -175,29 +198,37 @@ export const DashboardPage: React.FC = () => {
         </div>
       </section>
 
-      {/* Simple Quick Tasks */}
+      {/* Simple Quick Tasks (Strictly Filtered to User's Role) */}
       <section aria-label={tx(language, 'Quick actions', 'விரைவு செயல்கள்')} className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Link
-          to={role === 'VERIFIED_NGO' || role === 'COMMUNITY_KITCHEN' ? '/requests' : '/donations'}
+          to={primaryAction.to}
           className="rounded-2xl bg-white border border-[#123B35]/10 p-5 hover:border-[#123B35]/30 transition-colors flex items-start gap-3.5"
         >
-          {role === 'VERIFIED_NGO' || role === 'COMMUNITY_KITCHEN' ? (
+          {role === 'VERIFIED_NGO' || role === 'COMMUNITY_KITCHEN' || role === 'FIELD_WORKER' ? (
             <HandHeart className="w-5 h-5 text-[#123B35] shrink-0 mt-0.5" />
           ) : (
             <PackagePlus className="w-5 h-5 text-[#123B35] shrink-0 mt-0.5" />
           )}
           <div>
-            <div className="text-sm font-bold text-[#123B35]">
-              {role === 'VERIFIED_NGO' || role === 'COMMUNITY_KITCHEN'
-                ? tx(language, 'Request Meals', 'உணவு கோரிக்கை')
-                : tx(language, 'Share Extra Food', 'உபரி உணவைப் பகிர்க')}
-            </div>
+            <div className="text-sm font-bold text-[#123B35]">{primaryAction.label}</div>
             <p className="mt-1 text-xs text-[#64748B] leading-relaxed">
               {role === 'VERIFIED_NGO' || role === 'COMMUNITY_KITCHEN'
                 ? tx(
                     language,
                     'Let nearby donors know how many meals your community needs.',
                     'உங்கள் சமூகத்திற்கு எத்தனை உணவு தேவை என்பதை அருகிலுள்ள தானதாரர்களுக்குத் தெரிவியுங்கள்.'
+                  )
+                : role === 'DELIVERY_PARTNER'
+                ? tx(
+                    language,
+                    'Update your assigned pickup and drop-off delivery progress.',
+                    'உங்களுக்கு ஒதுக்கப்பட்ட சேகரிப்பு மற்றும் விநியோக நிலையைப் புதுப்பிக்கவும்.'
+                  )
+                : role === 'FIELD_WORKER'
+                ? tx(
+                    language,
+                    'Record requests for shelters even when offline.',
+                    'இணையம் இல்லாத போதும் காப்பகக் கோரிக்கைகளைப் பதிவு செய்யுங்கள்.'
                   )
                 : tx(
                     language,
@@ -208,24 +239,45 @@ export const DashboardPage: React.FC = () => {
           </div>
         </Link>
 
-        <Link
-          to="/nutriloop"
-          className="rounded-2xl bg-white border border-[#123B35]/10 p-5 hover:border-[#123B35]/30 transition-colors flex items-start gap-3.5"
-        >
-          <Sprout className="w-5 h-5 text-[#123B35] shrink-0 mt-0.5" />
-          <div>
-            <div className="text-sm font-bold text-[#123B35]">
-              {tx(language, 'Check Nutrition Gaps', 'ஊட்டச்சத்து குறைபாடுகளைப் பார்')}
+        {role !== 'DELIVERY_PARTNER' ? (
+          <Link
+            to="/nutriloop"
+            className="rounded-2xl bg-white border border-[#123B35]/10 p-5 hover:border-[#123B35]/30 transition-colors flex items-start gap-3.5"
+          >
+            <Sprout className="w-5 h-5 text-[#123B35] shrink-0 mt-0.5" />
+            <div>
+              <div className="text-sm font-bold text-[#123B35]">
+                {tx(language, 'Check Nutrition Gaps', 'ஊட்டச்சத்து குறைபாடுகளைப் பார்')}
+              </div>
+              <p className="mt-1 text-xs text-[#64748B] leading-relaxed">
+                {tx(
+                  language,
+                  'See which nutrients local shelters are missing and what foods help most.',
+                  'உள்ளூர் காப்பகங்களில் எந்த ஊட்டச்சத்து குறைவாக உள்ளது, எந்த உணவுகள் உதவும் என்பதைப் பாருங்கள்.'
+                )}
+              </p>
             </div>
-            <p className="mt-1 text-xs text-[#64748B] leading-relaxed">
-              {tx(
-                language,
-                'See which nutrients local shelters are missing and what foods help most.',
-                'உள்ளூர் காப்பகங்களில் எந்த ஊட்டச்சத்து குறைவாக உள்ளது, எந்த உணவுகள் உதவும் என்பதைப் பாருங்கள்.'
-              )}
-            </p>
-          </div>
-        </Link>
+          </Link>
+        ) : (
+          <Link
+            to="/impact"
+            className="rounded-2xl bg-white border border-[#123B35]/10 p-5 hover:border-[#123B35]/30 transition-colors flex items-start gap-3.5"
+          >
+            <Sprout className="w-5 h-5 text-[#123B35] shrink-0 mt-0.5" />
+            <div>
+              <div className="text-sm font-bold text-[#123B35]">
+                {tx(language, 'Delivery Impact', 'விநியோகத் தாக்கம்')}
+              </div>
+              <p className="mt-1 text-xs text-[#64748B] leading-relaxed">
+                {tx(
+                  language,
+                  'View completed delivery shifts and confirmed meal handovers.',
+                  'நிறைவுற்ற விநியோகப் பணிகள் மற்றும் உறுதிப்படுத்தப்பட்ட உணவுகளைப் பாருங்கள்.'
+                )}
+              </p>
+            </div>
+          </Link>
+        )}
 
         <Link
           to="/mealtrace"
@@ -253,9 +305,11 @@ export const DashboardPage: React.FC = () => {
           <h3 className="text-base font-bold font-display text-[#123B35]">
             {tx(language, 'Recent Food Batches', 'சமீபத்திய உணவுத் தொகுதிகள்')}
           </h3>
-          <Link to="/donations" className="text-xs font-semibold text-[#123B35] hover:underline">
-            {tx(language, 'See all', 'அனைத்தையும் பார்')}
-          </Link>
+          {(role === 'FOOD_DONOR' || role === 'ADMINISTRATOR') && (
+            <Link to="/donations" className="text-xs font-semibold text-[#123B35] hover:underline">
+              {tx(language, 'See all', 'அனைத்தையும் பார்')}
+            </Link>
+          )}
         </div>
 
         {visibleBatches.length === 0 ? (
@@ -263,12 +317,14 @@ export const DashboardPage: React.FC = () => {
             <p className="text-sm text-[#64748B]">
               {tx(language, 'No food batches listed yet.', 'இதுவரை உணவுத் தொகுதிகள் எதுவும் பதிவிடப்படவில்லை.')}
             </p>
-            <Link
-              to="/donations"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#123B35] text-white text-xs font-semibold"
-            >
-              {tx(language, 'Share First Meal', 'முதல் உணவைப் பகிர்க')}
-            </Link>
+            {(role === 'FOOD_DONOR' || role === 'ADMINISTRATOR') && (
+              <Link
+                to="/donations"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#123B35] text-white text-xs font-semibold"
+              >
+                {tx(language, 'Share First Meal', 'முதல் உணவைப் பகிர்க')}
+              </Link>
+            )}
           </div>
         ) : (
           <div className="divide-y divide-[#123B35]/8">

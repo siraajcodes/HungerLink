@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, CheckCircle2, ChevronDown, Lock, Mail, Play } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { tx } from '../i18n/helpers';
+import { LANGUAGE_OPTIONS } from '../i18n/translations';
 import type { UserRole } from '../types/database';
 
 type AuthMode = 'signin' | 'register' | 'reset';
@@ -114,24 +115,20 @@ export const AuthPage: React.FC = () => {
             {tx(language, 'Track a Meal', 'உணவைக் கண்காணி')}
           </Link>
           <div className="inline-flex rounded-lg bg-white p-0.5 border border-[#123B35]/15">
-            <button
-              type="button"
-              onClick={() => setLanguage('en')}
-              className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
-                language === 'en' ? 'bg-[#123B35] text-white' : 'text-[#64748B] hover:text-[#123B35]'
-              }`}
-            >
-              EN
-            </button>
-            <button
-              type="button"
-              onClick={() => setLanguage('ta')}
-              className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
-                language === 'ta' ? 'bg-[#123B35] text-white' : 'text-[#64748B] hover:text-[#123B35]'
-              }`}
-            >
-              தமிழ்
-            </button>
+            {LANGUAGE_OPTIONS.map((opt) => (
+              <button
+                key={opt.code}
+                type="button"
+                onClick={() => setLanguage(opt.code)}
+                className={`px-2 py-1 text-xs font-semibold rounded-md transition-colors ${
+                  language === opt.code
+                    ? 'bg-[#123B35] text-white'
+                    : 'text-[#64748B] hover:text-[#123B35]'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
           </div>
         </nav>
 
@@ -189,12 +186,16 @@ export const AuthPage: React.FC = () => {
               </p>
             </div>
             <div>
-              <div className="font-bold text-[#123B35]">{tx(language, '2. Match', '2. பொருத்துக')}</div>
+              <div className="font-bold text-[#123B35]">
+                {tx(language, '2. Auto-Dispatch', '2. தானியங்கி அனுப்புதல்', '2. ऑटो-डिस्पैच', '2. ఆటో-డిస్పాచ్')}
+              </div>
               <p className="mt-1">
                 {tx(
                   language,
-                  'Prioritize shelters by need & nutrition.',
-                  'தேவை மற்றும் ஊட்டச்சத்து அடிப்படையில் காப்பகங்களுக்கு முன்னுரிமை.'
+                  'Safety check, shelter matching, and driver dispatch run automatically.',
+                  'பாதுகாப்பு சோதனை, காப்பகப் பொருத்தம் மற்றும் ஓட்டுநர் ஒதுக்கீடு தானாகவே நடக்கும்.',
+                  'सुरक्षा जाँच, आश्रय मिलान और ड्राइवर असाइनमेंट अपने आप होते हैं।',
+                  'భద్రతా తనిఖీ, ఆశ్రయ సరిపోలిక మరియు డ్రైవర్ కేటాయింపు స్వయంచాలకంగా జరుగుతాయి.'
                 )}
               </p>
             </div>
