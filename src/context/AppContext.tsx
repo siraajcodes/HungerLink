@@ -807,37 +807,56 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (uploadErr) return { error: uploadErr.message };
       }
 
-      const { data: createdOrg, error: orgErr } = await supabase
-        .from('organisations')
-        .insert({
-          name: payload.name,
-          org_type: payload.org_type,
-          address: payload.address,
-          location_lat: payload.location_lat,
-          location_lng: payload.location_lng,
-          contact_person: payload.contact_person,
-          contact_phone: payload.contact_phone,
-          fssai_reg_no: payload.fssai_reg_no || null,
-          ngo_reg_no: payload.ngo_reg_no || null,
-          daily_capacity: payload.daily_capacity,
-          verification_status: 'pending',
-          verification_doc_path: docPath,
-          is_demo: false,
-        })
-        .select()
-        .single();
+      
+const newOrgId = makeUuid();
 
-      if (orgErr || !createdOrg) return { error: orgErr?.message ?? 'Failed to register organisation.' };
+const { error: orgErr } = await supabase
+  .from('organisations')
+  .insert({
+    id: newOrgId,
+    name: payload.name,
+    org_type: payload.org_type,
+    address: payload.address,
+    location_lat: payload.location_lat,
+    location_lng: payload.location_lng,
+    contact_person: payload.contact_person,
+    contact_phone: payload.contact_phone,
+    fssai_reg_no: payload.fssai_reg_no || null,
+    ngo_reg_no: payload.ngo_reg_no || null,
+    daily_capacity: payload.daily_capacity,
+    verification_status: 'pending',
+    verification_doc_path: docPath,
+    is_demo: false,
+  });
 
-      const { error: memberErr } = await supabase.from('organisation_members').insert({
-        organisation_id: (createdOrg as Organisation).id,
-        user_id: session.user.id,
-        membership_role: 'OWNER',
-        status: 'active',
-      });
-      if (memberErr) return { error: memberErr.message };
+if (orgErr) return { error: orgErr.message };
 
-      setLiveMemberOrgId((createdOrg as Organisation).id);
+// Create the first OWNER membership before retrieving the organisation.
+const { error: memberErr } = await supabase
+  .from('organisation_members')
+  .insert({
+    organisation_id: newOrgId,
+    user_id: session.user.id,
+    membership_role: 'OWNER',
+    status: 'active',
+  });
+
+if (memberErr) return { error: memberErr.message };
+
+// Now the user is an organisation member and can retrieve the pending organisation.
+const { data: createdOrg, error: fetchErr } = await supabase
+  .from('organisations')
+  .select('*')
+  .eq('id', newOrgId)
+  .single();
+
+if (fetchErr || !createdOrg) {
+  return { error: fetchErr?.message ?? 'Failed to retrieve registered organisation.' };
+}
+
+setLiveMemberOrgId((createdOrg as Organisation).id);
+
+
       await refreshAllData();
       pushToast('success', 'Organisation registered', 'Your organisation is now pending administrator verification.');
       return { error: null };
