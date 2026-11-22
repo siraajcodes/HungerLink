@@ -1,0 +1,6 @@
+{
+  "name": "HUNGERLINK 2.0",
+  "description": "Connecting Every Meal to Someone in Need — production surplus food rescue, smart allocation, MealTrace QR traceability, RescueRoute logistics, and ImpactLedger reporting.",
+  "requestFramePermissions": ["camera", "geolocation"],
+  "majorCapabilities": []
+}

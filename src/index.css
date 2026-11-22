@@ -1,0 +1,65 @@
+@import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+
+@theme {
+  --color-forest: #123B35;
+  --color-forest-deep: #0B2723;
+  --color-forest-muted: #1E544C;
+  --color-cream: #FFF9EF;
+  --color-cream-subtle: #F7EFE0;
+  --color-lime: #D7F36B;
+  --color-lime-hover: #C8E655;
+  --color-coral: #FF795C;
+  --color-coral-hover: #F06244;
+  --color-slate-neutral: #64748B;
+
+  --font-display: "Plus Jakarta Sans", "Noto Sans Tamil", system-ui, sans-serif;
+  --font-sans: "DM Sans", "Noto Sans Tamil", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    background-color: #FFF9EF;
+    color: #123B35;
+  }
+
+  h1, h2, h3, h4, .font-display {
+    font-family: var(--font-display);
+    text-wrap: balance;
+  }
+
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Accessible focus indicators */
+  :focus-visible {
+    outline: 2px solid #123B35;
+    outline-offset: 2px;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Leaflet map container visual polish */
+.leaflet-container {
+  font-family: var(--font-sans);
+  z-index: 10;
+  background-color: #F4EFE6;
+}
+
+.leaflet-popup-content-wrapper {
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(18, 59, 53, 0.12);
+  border: 1px solid rgba(18, 59, 53, 0.1);
+}
